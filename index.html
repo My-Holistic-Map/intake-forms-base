@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Form Engine</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Your Custom Form</h1>
+    <p>Please upload the form rules spreadsheet to begin.</p>
+    <input type="file" id="fileUploader" accept=".xlsx, .xls, .csv" />
+    <hr>
+    <form id="dynamicForm"></form>
+    <div id="results" style="display:none;">
+        <h2>Results</h2>
+        <p><strong>Your Score:</strong> <span id="score"></span></p>
+        <p><strong>Feedback:</strong> <span id="remediationMessage"></span></p>
+        <h3>Additional Considerations:</h3>
+        <ul id="linkedOutcomes"></ul>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
