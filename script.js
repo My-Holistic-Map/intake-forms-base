@@ -78,7 +78,7 @@ function buildForm() {
 function calculateResults() {
     let totalScore = 0;
     const linkedOutcomesList = [];
-    const userAnswers = {}; // New: Object to store user's answers
+    const userAnswers = {}; 
 
     formQuestions.forEach(q => {
         const questionName = `question-${q.QuestionID}`;
@@ -87,20 +87,39 @@ function calculateResults() {
         if (q.QuestionType === 'multiple-choice') {
             const selected = Array.from(elements).find(el => el.checked);
             if (selected) {
-                userAnswers[q.QuestionText] = selected.value; // Store the answer
+                userAnswers[q.QuestionText] = selected.value;
                 const answerIndex = String(q.AnswerOptions).split(',').map(o => o.trim()).indexOf(selected.value);
                 if (answerIndex > -1) {
                     totalScore += parseInt(String(q.AnswerValues).split(',')[answerIndex].trim());
                 }
 
-                if (q.LinkedOutcome && String(q.LinkedOutcome).includes(`If "${selected.value}"`)) {
-                    linkedOutcomesList.push(String(q.LinkedOutcome).split('then "')[1].slice(0, -1));
+                // --- Improved LinkedOutcome Logic ---
+                const hasLinkedOutcome = q.LinkedOutcome && String(q.LinkedOutcome).includes(`If "${selected.value}"`);
+                
+                if (hasLinkedOutcome) {
+                    // Split the string to isolate the outcome message
+                    const parts = String(q.LinkedOutcome).split('then "');
+                    
+                    // Check if the split was successful before accessing the second part
+                    if (parts.length > 1) {
+                        // Get the outcome text, which is the second part
+                        let outcomeText = parts[1];
+                        
+                        // Remove the trailing quote if it exists
+                        if (outcomeText.endsWith('"')) {
+                            outcomeText = outcomeText.slice(0, -1);
+                        }
+                        
+                        linkedOutcomesList.push(outcomeText);
+                    }
                 }
+                // --- End of Improved Logic ---
+
             }
         } else if (q.QuestionType === 'multiple-selection') {
             const selected = Array.from(elements).filter(el => el.checked);
             const selectedValues = selected.map(s => s.value);
-            userAnswers[q.QuestionText] = selectedValues; // Store the answers array
+            userAnswers[q.QuestionText] = selectedValues;
 
             selected.forEach(sel => {
                 const answerIndex = String(q.AnswerOptions).split(',').map(o => o.trim()).indexOf(sel.value);
@@ -111,12 +130,11 @@ function calculateResults() {
         } else if (q.QuestionType === 'text') {
             const element = elements[0];
             if (element) {
-                userAnswers[q.QuestionText] = element.value; // Store the text answer
+                userAnswers[q.QuestionText] = element.value;
             }
         }
     });
-
-    // Pass the collected answers to the display function
+    
     displayResults(totalScore, linkedOutcomesList, userAnswers);
 }
 
