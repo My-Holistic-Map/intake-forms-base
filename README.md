@@ -1,5 +1,3 @@
-Of course. Here’s a breakdown of how you can create a form engine that uses a spreadsheet for its rules and weighted answers to provide meaningful results.
-
 A form engine is a tool that allows you to create, manage, and process forms. In your case, the unique requirement is to use a spreadsheet (like Excel or Google Sheets) to define the form's logic, including questions, answers, and their associated weights. This engine will then use these rules to calculate a score and provide a meaningful result to the user.
 
 ### **How It Works**
