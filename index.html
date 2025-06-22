@@ -3,24 +3,427 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dynamic Form Engine</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Advanced Dynamic Form Engine</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Style for hiding/showing questions in branching logic */
+        .hidden-question { display: none; }
+    </style>
 </head>
-<body>
-    <h1>Your Custom Form</h1>
-    <p>Please upload the form rules spreadsheet to begin.</p>
-    <input type="file" id="fileUploader" accept=".xlsx, .xls, .csv" />
-    <hr>
-    <form id="dynamicForm"></form>
-    <div id="results" style="display:none;">
-        <h2>Results</h2>
-        <p><strong>Your Score:</strong> <span id="score"></span></p>
-        <p><strong>Feedback:</strong> <span id="remediationMessage"></span></p>
-        <h3>Additional Considerations:</h3>
-        <ul id="linkedOutcomes"></ul>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="max-w-4xl mx-auto p-4 sm:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-900">Dynamic Assessment</h1>
+            <p class="text-lg text-gray-600 mt-2">Please upload the form rules spreadsheet to begin.</p>
+            <div class="mt-4 flex justify-center">
+                 <input type="file" id="fileUploader" class="block w-full max-w-xs text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+            </div>
+        </header>
+        
+        <main id="formContainer" class="bg-white p-6 sm:p-8 rounded-xl shadow-md">
+            <!-- Form content will be dynamically generated here -->
+            <p class="text-gray-500 text-center">Awaiting spreadsheet upload...</p>
+        </main>
+
+        <!-- Navigation buttons will appear here -->
+        <div id="navigationContainer" class="mt-8 text-center"></div>
+
+        <!-- Results will be displayed here -->
+        <div id="resultsContainer" class="hidden mt-8"></div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
-    <script src="script.js"></script>
+    <!-- SheetJS library for reading spreadsheet files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+        // --- Form Engine State ---
+        let formRules = {
+            questions: [],
+            remediation: [],
+            content: []
+        };
+        let userState = {
+            currentPage: 1,
+            answers: {},
+            categoryScores: {},
+            primaryNeurotransmitter: null,
+            remediationData: {
+                primarySupplement: 'Default: Essential Nutrients',
+                secondarySupplement: 'Default: Magnesium + Zinc',
+                note: null
+            }
+        };
+
+        // --- DOM Element References ---
+        const fileUploader = document.getElementById('fileUploader');
+        const formContainer = document.getElementById('formContainer');
+        const navContainer = document.getElementById('navigationContainer');
+        const resultsContainer = document.getElementById('resultsContainer');
+
+        fileUploader.addEventListener('change', handleFileUpload);
+
+        // --- Core Functions ---
+
+        /**
+         * Reads the uploaded spreadsheet and initializes the form.
+         */
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+
+                    formRules.questions = XLSX.utils.sheet_to_json(workbook.Sheets['FormQuestions']);
+                    formRules.remediation = XLSX.utils.sheet_to_json(workbook.Sheets['RemediationRules']);
+                    formRules.content = XLSX.utils.sheet_to_json(workbook.Sheets['ResultContent']);
+                    
+                    resetState();
+                    buildPage(userState.currentPage);
+                } catch (error) {
+                    console.error("Error processing spreadsheet:", error);
+                    formContainer.innerHTML = `<p class="text-red-600 text-center">Error: Could not read the spreadsheet. Please ensure it has the sheets 'FormQuestions', 'RemediationRules', and 'ResultContent'.</p>`;
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        /**
+         * Resets the application state to its initial values.
+         */
+        function resetState() {
+            userState = {
+                currentPage: 1,
+                answers: {},
+                categoryScores: {},
+                primaryNeurotransmitter: null,
+                remediationData: {
+                    primarySupplement: 'Default: Essential Nutrients',
+                    secondarySupplement: 'Default: Magnesium + Zinc',
+                    note: null
+                }
+            };
+            resultsContainer.classList.add('hidden');
+        }
+
+        /**
+         * Builds and displays the questions for a specific page.
+         * @param {number} pageNum - The page number to build.
+         */
+        function buildPage(pageNum) {
+            formContainer.innerHTML = '';
+            const questionsForPage = formRules.questions.filter(q => q.Page === pageNum);
+
+            // Get unique group names for the current page, preserving order.
+            const groupNames = Array.from(new Set(questionsForPage.map(q => q.QuestionGroup).filter(Boolean)));
+            
+            // Render grouped questions first
+            groupNames.forEach(groupName => {
+                const groupWrapper = document.createElement('fieldset');
+                groupWrapper.className = "border-2 border-gray-200 p-4 rounded-lg mb-8";
+                
+                const legend = document.createElement('legend');
+                legend.className = "text-xl font-bold text-gray-800 px-2";
+                legend.innerText = groupName;
+                groupWrapper.appendChild(legend);
+
+                const questionsInGroup = questionsForPage.filter(q => q.QuestionGroup === groupName);
+                questionsInGroup.forEach(q => {
+                    const questionElement = createQuestionElement(q);
+                    groupWrapper.appendChild(questionElement);
+                });
+
+                formContainer.appendChild(groupWrapper);
+            });
+
+            // Render ungrouped questions
+            const ungroupedQuestions = questionsForPage.filter(q => !q.QuestionGroup);
+            ungroupedQuestions.forEach(q => {
+                const questionElement = createQuestionElement(q);
+                formContainer.appendChild(questionElement);
+            });
+
+            updateNavigation();
+        }
+
+        /**
+         * Creates a single question element (div wrapper).
+         * @param {object} q - The question object from the spreadsheet.
+         * @returns {HTMLElement} - The fully constructed question element.
+         */
+        function createQuestionElement(q) {
+            const questionWrapper = document.createElement('div');
+            questionWrapper.id = `q-wrapper-${q.QuestionID}`;
+            questionWrapper.className = "mb-6 p-4"; // Simplified class, as grouping provides borders
+
+            // Apply branching logic (show/hide)
+            if (q.ShowHideLogic && !evaluateShowHideLogic(q.ShowHideLogic)) {
+                questionWrapper.classList.add('hidden-question');
+            }
+
+            // Question Label
+            const label = document.createElement('label');
+            label.innerText = q.QuestionText;
+            label.className = 'block text-lg font-semibold text-gray-800 mb-3';
+            questionWrapper.appendChild(label);
+
+            // Answer Options
+            const optionsContainer = document.createElement('div');
+            optionsContainer.className = 'space-y-2';
+
+            // **FIX:** Check if AnswerOptions is valid before processing
+            if (q.AnswerOptions && String(q.AnswerOptions).trim() !== '') {
+                const options = String(q.AnswerOptions).split(',');
+                if (q.QuestionType === 'multiple-choice') {
+                    options.forEach(opt => {
+                        const optionLabel = document.createElement('label');
+                        optionLabel.className = 'flex items-center p-3 rounded-lg hover:bg-gray-100 cursor-pointer';
+                        const radio = document.createElement('input');
+                        radio.type = 'radio';
+                        radio.name = `question-${q.QuestionID}`;
+                        radio.value = opt.trim();
+                        radio.className = 'h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300';
+                        radio.onchange = () => handleAnswerChange(q.QuestionID, radio.value);
+                        optionLabel.appendChild(radio);
+                        optionLabel.append(` ${opt.trim()}`);
+                        optionsContainer.appendChild(optionLabel);
+                    });
+                }
+                // Add other question types here if needed.
+            } else if (q.QuestionType === 'multiple-choice') {
+                // **FIX:** Handle the error case where options are missing
+                optionsContainer.innerHTML = `<p class="text-red-500 text-sm">Configuration Error: Answer options are missing for this question (ID: ${q.QuestionID}).</p>`;
+            }
+
+
+            questionWrapper.appendChild(optionsContainer);
+            return questionWrapper;
+        }
+
+
+        /**
+         * Updates the navigation buttons based on the current page.
+         */
+        function updateNavigation() {
+            navContainer.innerHTML = '';
+            const maxPage = Math.max(...formRules.questions.map(q => q.Page));
+
+            if (userState.currentPage < maxPage) {
+                const nextButton = document.createElement('button');
+                nextButton.innerText = 'Next';
+                nextButton.className = 'bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded-lg shadow-md transition-transform transform hover:scale-105';
+                nextButton.onclick = () => {
+                    // Perform calculations after page 1
+                    if (userState.currentPage === 1) {
+                        calculateInitialScores();
+                    }
+                    userState.currentPage++;
+                    buildPage(userState.currentPage);
+                };
+                navContainer.appendChild(nextButton);
+            } else {
+                const submitButton = document.createElement('button');
+                submitButton.innerText = 'Get My Plan';
+                submitButton.className = 'bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-8 rounded-lg shadow-md transition-transform transform hover:scale-105';
+                submitButton.onclick = displayResults;
+                navContainer.appendChild(submitButton);
+            }
+        }
+        
+        /**
+         * Handles changes to an answer, updates state, and re-evaluates logic.
+         * @param {number} questionId - The ID of the question answered.
+         * @param {string} value - The selected answer value.
+         */
+        function handleAnswerChange(questionId, value) {
+            userState.answers[questionId] = value;
+            
+            // Re-evaluate branching logic for all questions
+            formRules.questions.forEach(q => {
+                if (q.ShowHideLogic) {
+                    const wrapper = document.getElementById(`q-wrapper-${q.QuestionID}`);
+                    if (wrapper) {
+                        if (evaluateShowHideLogic(q.ShowHideLogic)) {
+                            wrapper.classList.remove('hidden-question');
+                        } else {
+                            wrapper.classList.add('hidden-question');
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
+         * Evaluates the ShowHideLogic string for a question.
+         * @param {string} logicString - The logic rule from the spreadsheet.
+         * @returns {boolean} - True if the question should be shown, false otherwise.
+         */
+        function evaluateShowHideLogic(logicString) {
+            if (!logicString) return true;
+            
+            // Logic for PRIMARY_NT (e.g., "PRIMARY_NT:serotonin")
+            if (logicString.startsWith('PRIMARY_NT:')) {
+                const requiredNT = logicString.split(':')[1];
+                return userState.primaryNeurotransmitter === requiredNT;
+            }
+
+            // Logic for question answers (e.g., "1:Yes")
+            const [questionId, requiredAnswer] = logicString.split(':');
+            return userState.answers[questionId] === requiredAnswer;
+        }
+
+        /**
+         * Calculates scores for each category after page 1.
+         */
+        function calculateInitialScores() {
+            const categoryScores = {};
+            const questionsPage1 = formRules.questions.filter(q => q.Page === 1);
+
+            questionsPage1.forEach(q => {
+                const answer = userState.answers[q.QuestionID];
+                // **FIX:** Add safety checks for spreadsheet data before processing
+                const answerOptions = q.AnswerOptions ? String(q.AnswerOptions).split(',') : [];
+                const answerValues = q.AnswerValues ? String(q.AnswerValues).split(',') : [];
+
+                const answerIndex = answerOptions.map(o => o.trim()).indexOf(answer);
+
+                if (answerIndex > -1 && q.Category && answerValues.length > answerIndex) {
+                    if (!categoryScores[q.Category]) {
+                        categoryScores[q.Category] = 0;
+                    }
+                    categoryScores[q.Category] += parseInt(answerValues[answerIndex].trim()) || 0;
+                }
+            });
+            userState.categoryScores = categoryScores;
+
+            // Determine primary neurotransmitter
+            if (Object.keys(categoryScores).length > 0) {
+                const topNT = Object.entries(categoryScores).reduce((a, b) => a[1] >= b[1] ? a : b);
+                userState.primaryNeurotransmitter = topNT[0];
+            }
+        }
+        
+        /**
+         * Processes final answers and displays the results page.
+         */
+        function displayResults() {
+            // Process LinkedOutcomes from detailed questions
+            formRules.questions.filter(q => q.Page === userState.currentPage).forEach(q => {
+                const answer = userState.answers[q.QuestionID];
+                // **FIX:** Add safety checks for spreadsheet data before processing
+                if (q.LinkedOutcome && answer && q.AnswerOptions) {
+                    const outcomes = String(q.LinkedOutcome).split(',');
+                    const answerOptions = String(q.AnswerOptions).split(',');
+                    const answerIndex = answerOptions.map(o => o.trim()).indexOf(answer);
+
+                    if (answerIndex > -1 && outcomes.length > answerIndex && outcomes[answerIndex]) {
+                        const outcomeString = outcomes[answerIndex].trim();
+                        if(outcomeString) {
+                            const [key, ...valueParts] = outcomeString.split(':');
+                            const value = valueParts.join(':').trim();
+                            if (key === 'SET_PRIMARY_SUPPLEMENT') userState.remediationData.primarySupplement = value;
+                            if (key === 'SET_SECONDARY_SUPPLEMENT') userState.remediationData.secondarySupplement = value;
+                            if (key === 'SET_NOTE') userState.remediationData.note = value;
+                        }
+                    }
+                }
+            });
+
+            // Hide form and navigation
+            formContainer.innerHTML = '<p class="text-gray-500 text-center">Results generated below.</p>';
+            navContainer.innerHTML = '';
+            
+            // Build and show results
+            resultsContainer.innerHTML = buildResultsHTML();
+            resultsContainer.classList.remove('hidden');
+
+            // Add event listener for the reset button inside results
+            document.getElementById('resetButton').addEventListener('click', () => {
+                resetState();
+                buildPage(1);
+            });
+        }
+
+        /**
+         * Constructs the complete HTML for the results page.
+         * @returns {string} - The HTML string for the results page.
+         */
+        function buildResultsHTML() {
+            const primaryNT = userState.primaryNeurotransmitter;
+            if (!primaryNT) return '<p>Could not determine a primary focus. Please try the assessment again.</p>';
+
+            const lifestyleActions = formRules.content.filter(c => c.ContentType === 'lifestyle' && c.Category === primaryNT);
+            const foundations = formRules.content.filter(c => c.ContentType === 'foundation');
+            const multipleImbalancesRule = formRules.remediation.find(r => r.RuleID === 'MultipleImbalances');
+            const hasMultipleImbalances = Object.values(userState.categoryScores).filter(score => score > 0).length > 1;
+
+            let html = `
+                <div class="bg-white p-6 sm:p-8 rounded-xl shadow-lg">
+                    <div class="text-center mb-6">
+                        <h2 class="text-3xl font-bold text-gray-900">Your Personalized Brain Health Plan</h2>
+                        <button id="resetButton" class="mt-2 text-blue-600 hover:underline">Start New Assessment</button>
+                    </div>
+
+                    ${hasMultipleImbalances && multipleImbalancesRule ? `
+                    <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 mb-6 rounded-r-lg">
+                        <p><strong>Multiple Neurotransmitter Imbalances Detected:</strong> ${multipleImbalancesRule.ResultMessage}</p>
+                    </div>` : ''}
+
+                    <!-- Recommendations -->
+                    <div class="mb-8">
+                        <h3 class="text-2xl font-bold mb-4">Primary Focus: <span class="text-blue-700">${primaryNT}</span></h3>
+                        <div class="grid md:grid-cols-2 gap-6">
+                            <div class="bg-green-50 border-l-4 border-green-500 p-4 rounded-r-lg">
+                                <h4 class="font-bold text-green-800">Primary Supplement</h4>
+                                <p class="text-green-700">${userState.remediationData.primarySupplement}</p>
+                            </div>
+                            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
+                                <h4 class="font-bold text-blue-800">Secondary Supplement</h4>
+                                <p class="text-blue-700">${userState.remediationData.secondarySupplement}</p>
+                            </div>
+                        </div>
+                        ${userState.remediationData.note ? `
+                        <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 mt-4 rounded-r-lg">
+                            <p><strong>Important Note:</strong> ${userState.remediationData.note}</p>
+                        </div>` : ''}
+                    </div>
+
+                    <!-- Lifestyle -->
+                    <div class="mb-8">
+                        <h3 class="text-2xl font-bold mb-4">Key Lifestyle Actions for ${primaryNT}</h3>
+                        <ul class="list-disc list-inside space-y-2">
+                            ${lifestyleActions.map(action => `<li class="text-gray-700">${action.Content}</li>`).join('')}
+                        </ul>
+                    </div>
+
+                    <!-- Foundations -->
+                    <div>
+                        <h3 class="text-2xl font-bold mb-4">Brain Health Foundations</h3>
+                        <div class="space-y-4">
+                        ${foundations.map(f => {
+                            const content = f.Content || '';
+                            const parts = content.split('**Actions:**');
+                            const description = parts[0].replace('**Description:**', '').trim();
+                            const actions = parts.length > 1 ? parts[1].split(';').map(a => a.trim()).join(', ') : '';
+                            return `
+                                <div class="p-4 border rounded-lg">
+                                    <h4 class="font-bold">${f.Category}</h4>
+                                    <p class="text-sm text-gray-600">${description}</p>
+                                    <p class="text-sm text-blue-700 mt-1"><strong>Actions:</strong> ${actions}</p>
+                                </div>`;
+                        }).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+            return html;
+        }
+
+    </script>
 </body>
 </html>
