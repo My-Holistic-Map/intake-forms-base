@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Antimicrobials for Bacteria</title>
+
+    <style>
+
+        body {
+
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+
+            line-height: 1.6;
+
+            color: #333;
+
+            max-width: 800px;
+
+            margin: 0 auto;
+
+            padding: 20px;
+
+            background: linear-gradient(135deg, #879683 0%, #404e2c 100%);
+
+            min-height: 100vh;
+
+            text-align: center;
+
+        }
+
+        
+
+        h1 {
+
+            background: linear-gradient(135deg, #3b3e2e 0%, #404e2c 100%);
+
+            color: #fed695;
+
+            text-align: center;
+
+            margin-bottom: 30px;
+
+            padding: 20px;
+
+            border-radius: 8px;
+
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+
+            font-size: 2em;
+
+            font-weight: bold;
+
+        }
+
+        
+
+        .container {
+
+            background-color: #fed695;
+
+            border-radius: 8px;
+
+            padding: 30px;
+
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+
+            border: 2px solid #879683;
+
+        }
+
+        
+
+        .question-section {
+
+            display: none;
+
+            margin-bottom: 20px;
+
+        }
+
+        
+
+        .question-section.active {
+
+            display: block;
+
+        }
+
+        
+
+        .question {
+
+            font-size: 18px;
+
+            margin-bottom: 20px;
+
+            color: #a15236;
+
+            font-weight: bold;
+
+        }
+
+        
+
+        .button-group {
+
+            display: flex;
+
+            gap: 10px;
+
+            margin-top: 20px;
+
+            flex-wrap: wrap;
+
+            justify-content: center;
+
+        }
+
+        
+
+        button {
+
+            padding: 10px 20px;
+
+            font-size: 16px;
+
+            background: linear-gradient(135deg, #a15236 0%, #483621 100%);
+
+            color: #fed695;
+
+            border: none;
+
+            border-radius: 5px;
+
+            cursor: pointer;
+
+            transition: all 0.3s ease;
+
+            font-weight: bold;
+
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+
+        }
+
+        
+
+        button:hover {
+
+            transform: translateY(-2px);
+
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+
+            background: linear-gradient(135deg, #483621 0%, #a15236 100%);
+
+        }
+
+        
+
+        button:focus {
+
+            outline: 2px solid #767034;
+
+            outline-offset: 2px;
+
+        }
+
+        
+
+        select {
+
+            width: 80%;
+
+            max-width: 300px;
+
+            padding: 10px;
+
+            font-size: 16px;
+
+            border: 2px solid #879683;
+
+            border-radius: 4px;
+
+            margin: 10px 0;
+
+            background-color: #fed695;
+
+            color: #3b3e2e;
+
+        }
+
+        
+
+        select:focus {
+
+            outline: none;
+
+            border-color: #767034;
+
+            box-shadow: 0 0 8px rgba(118, 112, 52, 0.3);
+
+        }
+
+        
+
+        .result {
+
+            background: linear-gradient(135deg, #767034 0%, #483621 100%);
+
+            color: #fed695;
+
+            padding: 20px;
+
+            border-radius: 8px;
+
+            margin-top: 20px;
+
+            border: 2px solid #879683;
+
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+
+        }
+
+        
+
+        .restart-btn {
+
+            background: linear-gradient(135deg, #879683 0%, #404e2c 100%);
+
+            margin-top: 20px;
+
+            color: #fed695;
+
+        }
+
+        
+
+        .restart-btn:hover {
+
+            background: linear-gradient(135deg, #404e2c 0%, #879683 100%);
+
+        }
+
+        
+
+        .progress-bar {
+
+            height: 8px;
+
+            background-color: #879683;
+
+            border-radius: 4px;
+
+            margin-bottom: 30px;
+
+            overflow: hidden;
+
+            border: 1px solid #767034;
+
+        }
+
+        
+
+        .progress {
+
+            height: 100%;
+
+            background: linear-gradient(90deg, #a15236 0%, #767034 100%);
+
+            width: 0%;
+
+            transition: width 0.3s ease;
+
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h1>Antimicrobials for Bacteria</h1>
+
+        
+
+        <div class="progress-bar">
+
+            <div class="progress" id="progress"></div>
+
+        </div>
+
+        
+
+        <!-- Initial Question -->
+
+        <div id="initialQuestion" class="question-section active">
+
+            <div class="question">Have you already tried Melia Supreme or Golden Thread Supreme for your symptoms?</div>
+
+            <div class="button-group">
+
+                <button onclick="handleInitialAnswer('yes')">Yes</button>
+
+                <button onclick="handleInitialAnswer('no')">No</button>
+
+            </div>
+
+        </div>
+
+        
+
+        <!-- Upper Belly Pain Question -->
+
+        <div id="bellyPainQuestion" class="question-section">
+
+            <div class="question">Do you have pain in the upper part of your belly, especially when your stomach is empty, or frequent nausea, belching, or heartburn?</div>
+
+            <div class="button-group">
+
+                <button onclick="handleBellyPainAnswer('yes')">Yes</button>
+
+                <button onclick="handleBellyPainAnswer('no')">No</button>
+
+            </div>
+
+        </div>
+
+        
+
+        <!-- Which Product Tried Question -->
+
+        <div id="whichProductQuestion" class="question-section">
+
+            <div class="question">Which one did you try?</div>
+
+            <div class="button-group">
+
+                <button onclick="handleWhichProductAnswer('melia')">Melia Supreme</button>
+
+                <button onclick="handleWhichProductAnswer('goldenThread')">Golden Thread Supreme</button>
+
+                <button onclick="handleWhichProductAnswer('both')">Both</button>
+
+            </div>
+
+        </div>
+
+        
+
+        <!-- Melia Improvement Question -->
+
+        <div id="meliaImprovementQuestion" class="question-section">
+
+            <div class="question">Did Melia Supreme improve your symptoms?</div>
+
+            <div class="button-group">
+
+                <button onclick="handleMeliaImprovementAnswer('yes')">Yes</button>
+
+                <button onclick="handleMeliaImprovementAnswer('no')">No</button>
+
+            </div>
+
+        </div>
+
+        
+
+        <!-- Golden Thread Improvement Question -->
+
+        <div id="goldenThreadImprovementQuestion" class="question-section">
+
+            <div class="question">Did Golden Thread Supreme improve your symptoms?</div>
+
+            <div class="button-group">
+
+                <button onclick="handleGoldenThreadImprovementAnswer('yes')">Yes</button>
+
+                <button onclick="handleGoldenThreadImprovementAnswer('no')">No</button>
+
+            </div>
+
+        </div>
+
+        
+
+        <!-- SIBO Symptoms Question -->
+
+        <div id="siboSymptomsQuestion" class="question-section">
+
+            <div class="question">Do you have cramping or pain around your belly button, or excessive/foul-smelling gas?</div>
+
+            <div class="button-group">
+
+                <button onclick="handleSiboSymptomsAnswer('yes')">Yes</button>
+
+                <button onclick="handleSiboSymptomsAnswer('no')">No</button>
+
+            </div>
+
+        </div>
+
+        
+
+        <!-- H. Pylori Symptoms for Tried Both Question -->
+
+        <div id="hPyloriSymptomsForTriedBothQuestion" class="question-section">
+
+            <div class="question">Do you have upper abdominal pain, especially when your stomach is empty, or frequent nausea, belching, or heartburn?</div>
+
+            <div class="button-group">
+
+                <button onclick="handleHPyloriForTriedBothAnswer('yes')">Yes</button>
+
+                <button onclick="handleHPyloriForTriedBothAnswer('no')">No</button>
+
+            </div>
+
+        </div>
+
+        
+
+        <!-- SIBO Symptoms for Tried Both Question -->
+
+        <div id="siboSymptomsForTriedBothQuestion" class="question-section">
+
+            <div class="question">Do you have cramping or pain around your belly button, or excessive/foul-smelling gas?</div>
+
+            <div class="button-group">
+
+                <button onclick="handleSiboForTriedBothAnswer('yes')">Yes</button>
+
+                <button onclick="handleSiboForTriedBothAnswer('no')">No</button>
+
+            </div>
+
+        </div>
+
+        
+
+        <!-- Pregnancy Question -->
+
+        <div id="pregnancyQuestion" class="question-section">
+
+            <div class="question">Are you pregnant?</div>
+
+            <div class="button-group">
+
+                <button onclick="handlePregnancyAnswer('yes')">Yes</button>
+
+                <button onclick="handlePregnancyAnswer('no')">No</button>
+
+            </div>
+
+        </div>
+
+        
+
+        <!-- Health Concern Question -->
+
+        <div id="healthConcernQuestion" class="question-section">
+
+            <div class="question">What is your main health concern?</div>
+
+            <select id="healthConcern">
+
+                <option value="" disabled selected>Select your main health concern</option>
+
+                <option value="stomach">Stomach or digestion problems</option>
+
+                <option value="breathing">Breathing or lung issues</option>
+
+                <option value="allergies">Frequent allergies, sinus issues, or weak immune system</option>
+
+                <option value="tired">Feeling really tired or trouble losing weight</option>
+
+                <option value="hormone">Hormone-related issues</option>
+
+                <option value="joint">Joint or muscle pain</option>
+
+                <option value="brain">Brain fog, poor memory, or headaches</option>
+
+                <option value="sleep">Trouble sleeping</option>
+
+                <option value="mood">Feeling irritable, moody, or depressed</option>
+
+                <option value="heart">Heart or blood pressure concerns</option>
+
+                <option value="skin">Skin rashes or prostate issues</option>
+
+            </select>
+
+            <div class="button-group">
+
+                <button onclick="handleHealthConcernAnswer()">Next</button>
+
+            </div>
+
+        </div>
+
+        
+
+        <!-- Results Section -->
+
+        <div id="resultsSection" class="question-section">
+
+            <div class="question">Based on your responses, we recommend:</div>
+
+            <div id="recommendation" class="result"></div>
+
+            <button onclick="resetQuiz()" class="restart-btn">Start Over</button>
+
+        </div>
+
+    </div>
+
+
+
+    <script>
+
+        // State tracking variables
+
+        let recommendedAntimicrobial = '';
+
+        let triedBoth = false;
+
+        let additionalAdvice = '';
+
+        let hasHPyloriSymptoms = false;
+
+        let hasSiboSymptoms = false;
+
+        let isPregnant = false;
+
+        
+
+        // Product recommendations based on health concerns
+
+        const healthConcernRecommendations = {
+
+            'stomach': {
+
+                primary: 'Olive Leaf Supreme',
+
+                options: ['Andrographis Supreme', 'Morinda Supreme']
+
+            },
+
+            'breathing': {
+
+                primary: 'Usnea Supreme',
+
+                options: ['Houttuynia Supreme', 'Astragalus Supreme']
+
+            },
+
+            'allergies': {
+
+                primary: 'Morinda Supreme',
+
+                options: ['Astragalus Supreme', 'Vital Guard Supreme']
+
+            },
+
+            'tired': {
+
+                primary: 'Vital Guard Supreme',
+
+                options: ['Astragalus Supreme', 'Morinda Supreme']
+
+            },
+
+            'hormone': {
+
+                primary: 'Scutellaria Supreme',
+
+                options: ['Vital Guard Supreme', 'Olive Leaf Supreme']
+
+            },
+
+            'joint': {
+
+                primary: 'Cat\'s Claw Supreme',
+
+                options: ['Morinda Supreme', 'Olive Leaf Supreme']
+
+            },
+
+            'brain': {
+
+                primary: 'Scutellaria Supreme',
+
+                options: ['Vital Guard Supreme', 'Astragalus Supreme']
+
+            },
+
+            'sleep': {
+
+                primary: 'Scutellaria Supreme',
+
+                options: ['Vital Guard Supreme', 'Olive Leaf Supreme']
+
+            },
+
+            'mood': {
+
+                primary: 'Scutellaria Supreme',
+
+                options: ['Vital Guard Supreme', 'Astragalus Supreme']
+
+            },
+
+            'heart': {
+
+                primary: 'Olive Leaf Supreme',
+
+                options: ['Astragalus Supreme', 'Vital Guard Supreme']
+
+            },
+
+            'skin': {
+
+                primary: 'Morinda Supreme',
+
+                options: ['Olive Leaf Supreme', 'Cat\'s Claw Supreme']
+
+            }
+
+        };
+
+        
+
+        // Helper function to show a specific question section
+
+        function showSection(sectionId) {
+
+            // Hide all sections
+
+            const sections = document.querySelectorAll('.question-section');
+
+            sections.forEach(section => {
+
+                section.classList.remove('active');
+
+            });
+
+            
+
+            // Show the requested section
+
+            document.getElementById(sectionId).classList.add('active');
+
+            
+
+            // Update progress bar
+
+            updateProgress();
+
+        }
+
+        
+
+        // Update progress bar
+
+        function updateProgress() {
+
+            const totalSteps = triedBoth ? 4 : 3; // More steps if both were tried
+
+            
+
+            // Calculate which step we're on based on active section
+
+            let currentStep = 1;
+
+            
+
+            if (document.getElementById('healthConcernQuestion').classList.contains('active')) {
+
+                currentStep = 2;
+
+            } else if (document.getElementById('siboSymptomsQuestion').classList.contains('active')) {
+
+                currentStep = 3;
+
+            } else if (document.getElementById('resultsSection').classList.contains('active')) {
+
+                currentStep = totalSteps;
+
+            } else if (document.getElementById('bellyPainQuestion').classList.contains('active') || 
+
+                      document.getElementById('whichProductQuestion').classList.contains('active')) {
+
+                currentStep = 1.5;
+
+            } else if (document.getElementById('meliaImprovementQuestion').classList.contains('active') || 
+
+                      document.getElementById('goldenThreadImprovementQuestion').classList.contains('active')) {
+
+                currentStep = 2;
+
+            } else if (document.getElementById('hPyloriSymptomsForTriedBothQuestion').classList.contains('active')) {
+
+                currentStep = 3;
+
+            } else if (document.getElementById('siboSymptomsForTriedBothQuestion').classList.contains('active')) {
+
+                currentStep = 3.5;
+
+            }
+
+            
+
+            // Update progress bar
+
+            const progressPercentage = (currentStep / totalSteps) * 100;
+
+            document.getElementById('progress').style.width = progressPercentage + '%';
+
+        }
+
+        
+
+        // Handler for the initial question
+
+        function handleInitialAnswer(answer) {
+
+            if (answer === 'yes') {
+
+                showSection('whichProductQuestion');
+
+            } else {
+
+                showSection('bellyPainQuestion');
+
+            }
+
+        }
+
+        
+
+        // Handler for belly pain question
+
+        function handleBellyPainAnswer(answer) {
+
+            if (answer === 'yes') {
+
+                recommendedAntimicrobial = 'Golden Thread Supreme';
+
+                additionalAdvice = 'Also, try avoiding poultry for better results.';
+
+                showSection('pregnancyQuestion');
+
+            } else {
+
+                recommendedAntimicrobial = 'Melia Supreme';
+
+                showSection('siboSymptomsQuestion');
+
+            }
+
+        }
+
+        
+
+        // Handler for which product tried question
+
+        function handleWhichProductAnswer(answer) {
+
+            if (answer === 'melia') {
+
+                showSection('meliaImprovementQuestion');
+
+            } else if (answer === 'goldenThread') {
+
+                showSection('goldenThreadImprovementQuestion');
+
+            } else {
+
+                // Both tried
+
+                triedBoth = true;
+
+                showSection('hPyloriSymptomsForTriedBothQuestion');
+
+            }
+
+        }
+
+        
+
+        // Handler for Melia improvement question
+
+        function handleMeliaImprovementAnswer(answer) {
+
+            if (answer === 'yes') {
+
+                recommendedAntimicrobial = 'Melia Supreme';
+
+                showSection('siboSymptomsQuestion');
+
+            } else {
+
+                recommendedAntimicrobial = 'Golden Thread Supreme';
+
+                additionalAdvice = 'Also, try avoiding poultry for better results.';
+
+                showSection('pregnancyQuestion');
+
+            }
+
+        }
+
+        
+
+        // Handler for Golden Thread improvement question
+
+        function handleGoldenThreadImprovementAnswer(answer) {
+
+            if (answer === 'yes') {
+
+                recommendedAntimicrobial = 'Golden Thread Supreme';
+
+                additionalAdvice = 'Also, try avoiding poultry for better results.';
+
+                showSection('healthConcernQuestion');
+
+            } else {
+
+                recommendedAntimicrobial = 'Melia Supreme';
+
+                showSection('siboSymptomsQuestion');
+
+            }
+
+        }
+
+        
+
+        // Handler for SIBO symptoms question
+
+        function handleSiboSymptomsAnswer(answer) {
+
+            if (answer === 'yes') {
+
+                if (additionalAdvice) {
+
+                    additionalAdvice += ' Also, try following the FODMAP diet for better results.';
+
+                } else {
+
+                    additionalAdvice = 'Also, try following the FODMAP diet for better results.';
+
+                }
+
+            }
+
+            
+
+            showSection('healthConcernQuestion');
+
+        }
+
+        
+
+        // Handler for H. Pylori for tried both question
+
+        function handleHPyloriForTriedBothAnswer(answer) {
+
+            hasHPyloriSymptoms = answer === 'yes';
+
+            showSection('siboSymptomsForTriedBothQuestion');
+
+        }
+
+        
+
+        // Handler for SIBO for tried both question
+
+        function handleSiboForTriedBothAnswer(answer) {
+
+            hasSiboSymptoms = answer === 'yes';
+
+            
+
+            // Build additional advice based on symptoms
+
+            if (hasHPyloriSymptoms) {
+
+                additionalAdvice += 'Try avoiding poultry. ';
+
+            }
+
+            if (hasSiboSymptoms) {
+
+                additionalAdvice += 'Try following the FODMAP diet. ';
+
+            }
+
+            
+
+            showSection('pregnancyQuestion');
+
+        }
+
+        
+
+        // Handler for pregnancy question
+
+        function handlePregnancyAnswer(answer) {
+
+            isPregnant = answer === 'yes';
+
+            showSection('healthConcernQuestion');
+
+        }
+
+        
+
+        // Handler for health concern question
+
+        function handleHealthConcernAnswer() {
+
+            const healthConcern = document.getElementById('healthConcern').value;
+
+            
+
+            if (healthConcern) {
+
+                const recommendation = generateRecommendation(healthConcern);
+
+                document.getElementById('recommendation').innerHTML = recommendation;
+
+                showSection('resultsSection');
+
+            }
+
+        }
+
+        
+
+        // Generate recommendation based on selected health concern and antimicrobial
+
+        function generateRecommendation(healthConcern) {
+
+            const healthRecommendation = healthConcernRecommendations[healthConcern];
+
+            let recommendation = '';
+
+            
+
+            // If pregnant, provide pregnancy warning
+
+            if (isPregnant) {
+
+                recommendation = `<strong>Important:</strong> Since you are pregnant, please consult with your healthcare provider before taking any supplements. `;
+
+                recommendation += `The general recommendation would be: `;
+
+            }
+
+            
+
+            if (triedBoth) {
+
+                // Both strong antimicrobials didn't work, recommend only milder herbs
+
+                recommendation += `Since both strong antimicrobials didn't work, try <strong>${healthRecommendation.primary}</strong>. `;
+
+                recommendation += `If it doesn't work, try <strong>${healthRecommendation.options[0]}</strong> or <strong>${healthRecommendation.options[1]}</strong>.`;
+
+            } else if (recommendedAntimicrobial) {
+
+                // Recommend strong antimicrobial with milder herb
+
+                recommendation += `Try <strong>${recommendedAntimicrobial}</strong> with <strong>${healthRecommendation.primary}</strong>. `;
+
+                recommendation += `If it doesn't work, try <strong>${healthRecommendation.options[0]}</strong> or <strong>${healthRecommendation.options[1]}</strong>.`;
+
+            } else {
+
+                // Fallback in case no antimicrobial was selected (shouldn't happen)
+
+                recommendation += `Try <strong>${healthRecommendation.primary}</strong>. `;
+
+                recommendation += `If it doesn't work, try <strong>${healthRecommendation.options[0]}</strong> or <strong>${healthRecommendation.options[1]}</strong>.`;
+
+            }
+
+            
+
+            // Add any additional advice
+
+            if (additionalAdvice) {
+
+                recommendation += ` <em>${additionalAdvice}</em>`;
+
+            }
+
+            
+
+            return recommendation;
+
+        }
+
+        
+
+        // Reset the quiz to start over
+
+        function resetQuiz() {
+
+            recommendedAntimicrobial = '';
+
+            triedBoth = false;
+
+            additionalAdvice = '';
+
+            hasHPyloriSymptoms = false;
+
+            hasSiboSymptoms = false;
+
+            isPregnant = false;
+
+            document.getElementById('healthConcern').selectedIndex = 0;
+
+            showSection('initialQuestion');
+
+        }
+
+        
+
+        // Initialize the quiz
+
+        updateProgress();
+
+    </script>
+
+</body>
+
+</html>
