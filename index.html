@@ -212,7 +212,13 @@
                 
                 console.log(`[DEBUG] Parsing complete. Found ${formRules.questions.length} questions.`);
 
-                // --- Part 2: Building the UI ---
+                // --- Part 2: Preparing the UI Container ---
+                // FIX: Clear the main content area to remove the "Loading..." message
+                // or the uploader, and then rebuild the form container for a clean state.
+                const mainContent = document.getElementById('mainContent');
+                mainContent.innerHTML = '<div id="formContainer"></div>'; // Recreate the form container
+                
+                // --- Part 3: Building the UI ---
                 // This block isolates the UI generation to catch silent errors.
                 try {
                     console.log("[DEBUG] Resetting application state...");
@@ -235,6 +241,7 @@
 
             } catch (error) {
                 console.error("[DEBUG] A critical error occurred while parsing the spreadsheet:", error);
+                const mainContent = document.getElementById('mainContent'); // get it again in case of error
                 mainContent.innerHTML = `<p class="text-center text-red-500 text-lg font-semibold">Error: Could not read the spreadsheet.</p><p class="text-center text-red-500 mt-2">Please ensure it is correctly formatted with all required sheets and columns.</p>`;
             }
         }
