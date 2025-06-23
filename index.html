@@ -170,6 +170,7 @@
          * This is called by both the URL loader and the file uploader.
          * @param {ArrayBuffer} data - The raw spreadsheet data.
          */
+        /*
         function processSpreadsheet(data) {
             try {
                 const workbook = XLSX.read(data, { type: 'array' });
@@ -190,6 +191,54 @@
                 mainContent.innerHTML = `<p class="text-center text-red-500 text-lg">Error: Could not read the spreadsheet. Please ensure it is correctly formatted.</p>`;
             }
         }
+        */
+
+                /**
+         * Central function to parse spreadsheet data and start the form.
+         * This version includes more detailed logging and error handling for the UI build process.
+         * @param {ArrayBuffer} data - The raw spreadsheet data.
+         */
+        function processSpreadsheet(data) {
+            try {
+                // --- Part 1: Parsing the Spreadsheet ---
+                console.log("[DEBUG] Parsing all sheets from the workbook...");
+                const workbook = XLSX.read(data, { type: 'array' });
+                
+                formRules.environment = XLSX.utils.sheet_to_json(workbook.Sheets['Environment']);
+                formRules.pages = XLSX.utils.sheet_to_json(workbook.Sheets['Pages']);
+                formRules.questions = XLSX.utils.sheet_to_json(workbook.Sheets['FormQuestions']);
+                formRules.remediation = XLSX.utils.sheet_to_json(workbook.Sheets['RemediationRules']);
+                formRules.content = XLSX.utils.sheet_to_json(workbook.Sheets['ResultContent']);
+                
+                console.log(`[DEBUG] Parsing complete. Found ${formRules.questions.length} questions.`);
+
+                // --- Part 2: Building the UI ---
+                // This block isolates the UI generation to catch silent errors.
+                try {
+                    console.log("[DEBUG] Resetting application state...");
+                    resetState();
+                    
+                    console.log("[DEBUG] Populating environment (header/footer)...");
+                    populateEnvironment();
+                    
+                    console.log("[DEBUG] Building page content...");
+                    buildPage(userState.currentPage);
+                    
+                    console.log("[DEBUG] UI build process completed successfully.");
+
+                } catch (uiError) {
+                    // This will catch errors specifically from the UI building functions.
+                    console.error("[DEBUG] A critical error occurred while building the UI:", uiError);
+                    mainContent.innerHTML = `<p class="text-center text-red-500 text-lg font-semibold">Error: Could not render the form after loading.</p><p class="text-center text-red-500 mt-2">A required value may be missing or misformatted in the spreadsheet. Please check the console.</p>`;
+                    return; // Stop execution
+                }
+
+            } catch (error) {
+                console.error("[DEBUG] A critical error occurred while parsing the spreadsheet:", error);
+                mainContent.innerHTML = `<p class="text-center text-red-500 text-lg font-semibold">Error: Could not read the spreadsheet.</p><p class="text-center text-red-500 mt-2">Please ensure it is correctly formatted with all required sheets and columns.</p>`;
+            }
+        }
+
 
         function resetState() {
             userState = {
