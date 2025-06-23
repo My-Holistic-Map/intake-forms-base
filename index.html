@@ -8,324 +8,286 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
-        /* Style for hiding/showing questions in branching logic */
         .hidden-question { display: none; }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800">
+<body class="bg-gray-100 text-gray-800">
 
-    <div class="max-w-4xl mx-auto p-4 sm:p-8">
-        <header class="text-center mb-8">
-            <h1 class="text-4xl font-bold text-gray-900">Dynamic Assessment</h1>
-            <p class="text-lg text-gray-600 mt-2">Please upload the form rules spreadsheet to begin.</p>
-            <div class="mt-4 flex justify-center">
-                 <input type="file" id="fileUploader" class="block w-full max-w-xs text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
-            </div>
+    <div class="max-w-5xl mx-auto p-4 sm:p-8">
+        <!-- == Header Section (Dynamically Populated) == -->
+        <header id="pageHeader" class="text-center mb-6">
+            <h1 id="assessmentTitle" class="text-4xl font-bold text-gray-900">Dynamic Assessment</h1>
+            <p id="assessmentIntro" class="text-lg text-gray-600 mt-2 max-w-3xl mx-auto"></p>
+            <nav id="primaryNav" class="mt-4 flex justify-center items-center space-x-4 sm:space-x-6 text-gray-700"></nav>
         </header>
         
+        <!-- == Breadcrumb Section (Dynamically Populated) == -->
+        <div id="breadcrumbContainer" class="mb-4 text-sm text-gray-500"></div>
+
         <main id="formContainer" class="bg-white p-6 sm:p-8 rounded-xl shadow-md">
-            <!-- Form content will be dynamically generated here -->
-            <p class="text-gray-500 text-center">Awaiting spreadsheet upload...</p>
+            <div class="text-center">
+                <p class="text-lg font-semibold">Please upload the form rules spreadsheet to begin.</p>
+                <input type="file" id="fileUploader" class="mt-4 mx-auto block w-full max-w-xs text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+            </div>
         </main>
 
-        <!-- Navigation buttons will appear here -->
         <div id="navigationContainer" class="mt-8 text-center"></div>
-
-        <!-- Results will be displayed here -->
         <div id="resultsContainer" class="hidden mt-8"></div>
+
+        <!-- == Footer Section (Dynamically Populated) == -->
+        <footer id="pageFooter" class="mt-12 pt-8 border-t border-gray-200"></footer>
     </div>
 
-    <!-- SheetJS library for reading spreadsheet files -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script>
-        // --- Form Engine State ---
         let formRules = {
             questions: [],
             remediation: [],
-            content: []
+            content: [],
+            environment: [],
+            pages: []
         };
         let userState = {
             currentPage: 1,
             answers: {},
             categoryScores: {},
             primaryNeurotransmitter: null,
-            remediationData: {
-                primarySupplement: 'Default: Essential Nutrients',
-                secondarySupplement: 'Default: Magnesium + Zinc',
-                note: null
-            }
+            remediationData: { primarySupplement: '', secondarySupplement: '', note: '' }
         };
 
-        // --- DOM Element References ---
         const fileUploader = document.getElementById('fileUploader');
-        const formContainer = document.getElementById('formContainer');
-        const navContainer = document.getElementById('navigationContainer');
-        const resultsContainer = document.getElementById('resultsContainer');
-
         fileUploader.addEventListener('change', handleFileUpload);
 
-        // --- Core Functions ---
-
-        /**
-         * Reads the uploaded spreadsheet and initializes the form.
-         */
         function handleFileUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
-
             const reader = new FileReader();
             reader.onload = (e) => {
                 try {
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
-
+                    
+                    // Read all sheets into the rules object
+                    formRules.environment = XLSX.utils.sheet_to_json(workbook.Sheets['Environment']);
+                    formRules.pages = XLSX.utils.sheet_to_json(workbook.Sheets['Pages']);
                     formRules.questions = XLSX.utils.sheet_to_json(workbook.Sheets['FormQuestions']);
                     formRules.remediation = XLSX.utils.sheet_to_json(workbook.Sheets['RemediationRules']);
                     formRules.content = XLSX.utils.sheet_to_json(workbook.Sheets['ResultContent']);
                     
                     resetState();
+                    populateEnvironment();
                     buildPage(userState.currentPage);
                 } catch (error) {
                     console.error("Error processing spreadsheet:", error);
-                    formContainer.innerHTML = `<p class="text-red-600 text-center">Error: Could not read the spreadsheet. Please ensure it has the sheets 'FormQuestions', 'RemediationRules', and 'ResultContent'.</p>`;
+                    document.getElementById('formContainer').innerHTML = `<p class="text-red-600 text-center">Error: Could not read the spreadsheet. Please ensure it has the sheets: Environment, Pages, FormQuestions, RemediationRules, and ResultContent.</p>`;
                 }
             };
             reader.readAsArrayBuffer(file);
         }
 
-        /**
-         * Resets the application state to its initial values.
-         */
         function resetState() {
             userState = {
                 currentPage: 1,
                 answers: {},
                 categoryScores: {},
                 primaryNeurotransmitter: null,
-                remediationData: {
-                    primarySupplement: 'Default: Essential Nutrients',
-                    secondarySupplement: 'Default: Magnesium + Zinc',
-                    note: null
-                }
+                remediationData: { primarySupplement: 'Default: Essential Nutrients', secondarySupplement: 'Default: Magnesium + Zinc', note: null }
             };
-            resultsContainer.classList.add('hidden');
+            document.getElementById('resultsContainer').classList.add('hidden');
+            document.getElementById('formContainer').classList.remove('hidden');
+            document.getElementById('navigationContainer').classList.remove('hidden');
         }
 
-        /**
-         * Builds and displays the questions for a specific page.
-         * @param {number} pageNum - The page number to build.
-         */
-        function buildPage(pageNum) {
-            formContainer.innerHTML = '';
-            const questionsForPage = formRules.questions.filter(q => q.Page === pageNum);
+        function populateEnvironment() {
+            const getVar = (key) => (formRules.environment.find(v => v.Key === key) || {}).Value || '';
 
-            // Get unique group names for the current page, preserving order.
-            const groupNames = Array.from(new Set(questionsForPage.map(q => q.QuestionGroup).filter(Boolean)));
+            document.getElementById('assessmentTitle').innerText = getVar('Assessment Title');
+            document.getElementById('assessmentIntro').innerText = getVar('Intro');
+
+            const primaryNavContainer = document.getElementById('primaryNav');
+            primaryNavContainer.innerHTML = '';
+            getVar('Primary Nav').split(';').forEach(link => {
+                const [text, url] = link.split(',').map(s => s.trim());
+                if (text === 'Restart') {
+                    const button = document.createElement('button');
+                    button.innerText = text;
+                    button.className = "hover:text-blue-600 hover:underline";
+                    button.onclick = () => {
+                        resetState();
+                        buildPage(1);
+                    };
+                    primaryNavContainer.appendChild(button);
+                } else {
+                    const a = document.createElement('a');
+                    a.innerText = text;
+                    a.href = url;
+                    a.target = "_blank";
+                    a.className = "hover:text-blue-600 hover:underline";
+                    primaryNavContainer.appendChild(a);
+                }
+            });
+
+            const footer = document.getElementById('pageFooter');
+            footer.innerHTML = '<div id="secondaryNav" class="grid grid-cols-1 sm:grid-cols-3 gap-8 text-center sm:text-left"></div>';
+            const secondaryNav = document.getElementById('secondaryNav');
+            for (let i = 1; i <= 3; i++) {
+                const col = document.createElement('div');
+                const links = getVar(`Footer Col ${i} Links`).split(';').filter(Boolean);
+                const title = getVar(`Footer Col ${i} Title`);
+                col.innerHTML = `<h3 class="font-bold text-gray-900 mb-2">${title}</h3><ul class="space-y-2"></ul>`;
+                const ul = col.querySelector('ul');
+                links.forEach(link => {
+                    const [text, url] = link.split(',').map(s => s.trim());
+                    ul.innerHTML += `<li><a href="${url}" target="_blank" class="text-gray-600 hover:text-blue-600">${text}</a></li>`;
+                });
+                secondaryNav.appendChild(col);
+            }
+        }
+        
+        function updateBreadcrumb() {
+            const container = document.getElementById('breadcrumbContainer');
+            const totalPages = Math.max(...formRules.pages.map(p => p.PageNumber));
+            const assessmentTitle = (formRules.environment.find(v => v.Key === 'Assessment Title') || {}).Value || 'Assessment';
+            const currentPageInfo = formRules.pages.find(p => p.PageNumber === userState.currentPage);
+            const pageTitle = currentPageInfo ? currentPageInfo.PageTitle : `Page ${userState.currentPage}`;
+            const percentComplete = Math.round((userState.currentPage -1) / totalPages * 100);
             
-            // Render grouped questions first
+            container.innerHTML = `${assessmentTitle} &rarr; ${pageTitle} &rarr; <strong class="text-blue-600">${userState.currentPage} of ${totalPages} (${percentComplete}%)</strong>`;
+        }
+
+
+        function buildPage(pageNum) {
+            document.getElementById('formContainer').innerHTML = '';
+            updateBreadcrumb();
+            
+            const questionsForPage = formRules.questions.filter(q => q.Page === pageNum);
+            const groupNames = [...new Set(questionsForPage.map(q => q.QuestionGroup).filter(Boolean))];
+            
             groupNames.forEach(groupName => {
                 const groupWrapper = document.createElement('fieldset');
                 groupWrapper.className = "border-2 border-gray-200 p-4 rounded-lg mb-8";
+                groupWrapper.innerHTML = `<legend class="text-xl font-bold text-gray-800 px-2">${groupName}</legend>`;
                 
-                const legend = document.createElement('legend');
-                legend.className = "text-xl font-bold text-gray-800 px-2";
-                legend.innerText = groupName;
-                groupWrapper.appendChild(legend);
-
-                const questionsInGroup = questionsForPage.filter(q => q.QuestionGroup === groupName);
-                questionsInGroup.forEach(q => {
-                    const questionElement = createQuestionElement(q);
-                    groupWrapper.appendChild(questionElement);
+                questionsForPage.filter(q => q.QuestionGroup === groupName).forEach(q => {
+                    groupWrapper.appendChild(createQuestionElement(q));
                 });
-
-                formContainer.appendChild(groupWrapper);
+                document.getElementById('formContainer').appendChild(groupWrapper);
             });
 
-            // Render ungrouped questions
-            const ungroupedQuestions = questionsForPage.filter(q => !q.QuestionGroup);
-            ungroupedQuestions.forEach(q => {
-                const questionElement = createQuestionElement(q);
-                formContainer.appendChild(questionElement);
+            questionsForPage.filter(q => !q.QuestionGroup).forEach(q => {
+                document.getElementById('formContainer').appendChild(createQuestionElement(q));
             });
 
             updateNavigation();
         }
 
-        /**
-         * Creates a single question element (div wrapper).
-         * @param {object} q - The question object from the spreadsheet.
-         * @returns {HTMLElement} - The fully constructed question element.
-         */
         function createQuestionElement(q) {
-            const questionWrapper = document.createElement('div');
-            questionWrapper.id = `q-wrapper-${q.QuestionID}`;
-            questionWrapper.className = "mb-6 p-4"; // Simplified class, as grouping provides borders
-
-            // Apply branching logic (show/hide)
+            const wrapper = document.createElement('div');
+            wrapper.id = `q-wrapper-${q.QuestionID}`;
+            wrapper.className = "mb-6 p-4";
             if (q.ShowHideLogic && !evaluateShowHideLogic(q.ShowHideLogic)) {
-                questionWrapper.classList.add('hidden-question');
+                wrapper.classList.add('hidden-question');
             }
-
-            // Question Label
-            const label = document.createElement('label');
-            label.innerText = q.QuestionText;
-            label.className = 'block text-lg font-semibold text-gray-800 mb-3';
-            questionWrapper.appendChild(label);
-
-            // Answer Options
+            wrapper.innerHTML = `<label class="block text-lg font-semibold text-gray-800 mb-3">${q.QuestionText}</label>`;
+            
             const optionsContainer = document.createElement('div');
             optionsContainer.className = 'space-y-2';
 
-            // **FIX:** Check if AnswerOptions is valid before processing
-            if (q.AnswerOptions && String(q.AnswerOptions).trim() !== '') {
-                const options = String(q.AnswerOptions).split(',');
-                if (q.QuestionType === 'multiple-choice') {
-                    options.forEach(opt => {
-                        const optionLabel = document.createElement('label');
-                        optionLabel.className = 'flex items-center p-3 rounded-lg hover:bg-gray-100 cursor-pointer';
-                        const radio = document.createElement('input');
-                        radio.type = 'radio';
-                        radio.name = `question-${q.QuestionID}`;
-                        radio.value = opt.trim();
-                        radio.className = 'h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300';
-                        radio.onchange = () => handleAnswerChange(q.QuestionID, radio.value);
-                        optionLabel.appendChild(radio);
-                        optionLabel.append(` ${opt.trim()}`);
-                        optionsContainer.appendChild(optionLabel);
-                    });
-                }
-                // Add other question types here if needed.
-            } else if (q.QuestionType === 'multiple-choice') {
-                // **FIX:** Handle the error case where options are missing
-                optionsContainer.innerHTML = `<p class="text-red-500 text-sm">Configuration Error: Answer options are missing for this question (ID: ${q.QuestionID}).</p>`;
+            if (q.QuestionType === 'multiple-choice' && q.AnswerOptions && String(q.AnswerOptions).trim()) {
+                String(q.AnswerOptions).split(',').forEach(opt => {
+                    const cleanOpt = opt.trim();
+                    const optionLabel = document.createElement('label');
+                    optionLabel.className = 'flex items-center p-3 rounded-lg hover:bg-gray-100 cursor-pointer';
+                    optionLabel.innerHTML = `
+                        <input type="radio" name="question-${q.QuestionID}" value="${cleanOpt}" class="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300">
+                        <span class="ml-3">${cleanOpt}</span>`;
+                    optionLabel.querySelector('input').onchange = () => handleAnswerChange(q.QuestionID, cleanOpt);
+                    optionsContainer.appendChild(optionLabel);
+                });
+            } else if(q.QuestionType === 'multiple-choice') {
+                 optionsContainer.innerHTML = `<p class="text-red-500 text-sm">Config Error: Missing AnswerOptions for QID ${q.QuestionID}.</p>`;
             }
-
-
-            questionWrapper.appendChild(optionsContainer);
-            return questionWrapper;
+            
+            wrapper.appendChild(optionsContainer);
+            return wrapper;
         }
 
-
-        /**
-         * Updates the navigation buttons based on the current page.
-         */
         function updateNavigation() {
+            const navContainer = document.getElementById('navigationContainer');
             navContainer.innerHTML = '';
-            const maxPage = Math.max(...formRules.questions.map(q => q.Page));
+            const maxPage = Math.max(...formRules.pages.map(p => p.PageNumber));
 
             if (userState.currentPage < maxPage) {
-                const nextButton = document.createElement('button');
-                nextButton.innerText = 'Next';
-                nextButton.className = 'bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded-lg shadow-md transition-transform transform hover:scale-105';
-                nextButton.onclick = () => {
-                    // Perform calculations after page 1
-                    if (userState.currentPage === 1) {
-                        calculateInitialScores();
-                    }
+                const nextBtn = document.createElement('button');
+                nextBtn.innerText = 'Next';
+                nextBtn.className = 'bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded-lg shadow-md transition-transform transform hover:scale-105';
+                nextBtn.onclick = () => {
+                    if (userState.currentPage === 1) calculateInitialScores();
                     userState.currentPage++;
                     buildPage(userState.currentPage);
                 };
-                navContainer.appendChild(nextButton);
+                navContainer.appendChild(nextBtn);
             } else {
-                const submitButton = document.createElement('button');
-                submitButton.innerText = 'Get My Plan';
-                submitButton.className = 'bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-8 rounded-lg shadow-md transition-transform transform hover:scale-105';
-                submitButton.onclick = displayResults;
-                navContainer.appendChild(submitButton);
+                const submitBtn = document.createElement('button');
+                submitBtn.innerText = 'Get My Plan';
+                submitBtn.className = 'bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-8 rounded-lg shadow-md transition-transform transform hover:scale-105';
+                submitBtn.onclick = displayResults;
+                navContainer.appendChild(submitBtn);
             }
         }
         
-        /**
-         * Handles changes to an answer, updates state, and re-evaluates logic.
-         * @param {number} questionId - The ID of the question answered.
-         * @param {string} value - The selected answer value.
-         */
         function handleAnswerChange(questionId, value) {
             userState.answers[questionId] = value;
-            
-            // Re-evaluate branching logic for all questions
             formRules.questions.forEach(q => {
                 if (q.ShowHideLogic) {
                     const wrapper = document.getElementById(`q-wrapper-${q.QuestionID}`);
                     if (wrapper) {
-                        if (evaluateShowHideLogic(q.ShowHideLogic)) {
-                            wrapper.classList.remove('hidden-question');
-                        } else {
-                            wrapper.classList.add('hidden-question');
-                        }
+                         wrapper.classList.toggle('hidden-question', !evaluateShowHideLogic(q.ShowHideLogic));
                     }
                 }
             });
         }
 
-        /**
-         * Evaluates the ShowHideLogic string for a question.
-         * @param {string} logicString - The logic rule from the spreadsheet.
-         * @returns {boolean} - True if the question should be shown, false otherwise.
-         */
         function evaluateShowHideLogic(logicString) {
             if (!logicString) return true;
-            
-            // Logic for PRIMARY_NT (e.g., "PRIMARY_NT:serotonin")
             if (logicString.startsWith('PRIMARY_NT:')) {
-                const requiredNT = logicString.split(':')[1];
-                return userState.primaryNeurotransmitter === requiredNT;
+                return userState.primaryNeurotransmitter === logicString.split(':')[1];
             }
-
-            // Logic for question answers (e.g., "1:Yes")
             const [questionId, requiredAnswer] = logicString.split(':');
             return userState.answers[questionId] === requiredAnswer;
         }
 
-        /**
-         * Calculates scores for each category after page 1.
-         */
         function calculateInitialScores() {
-            const categoryScores = {};
-            const questionsPage1 = formRules.questions.filter(q => q.Page === 1);
-
-            questionsPage1.forEach(q => {
+            const scores = {};
+            formRules.questions.filter(q => q.Page === 1).forEach(q => {
                 const answer = userState.answers[q.QuestionID];
-                // **FIX:** Add safety checks for spreadsheet data before processing
-                const answerOptions = q.AnswerOptions ? String(q.AnswerOptions).split(',') : [];
-                const answerValues = q.AnswerValues ? String(q.AnswerValues).split(',') : [];
+                const opts = q.AnswerOptions ? String(q.AnswerOptions).split(',') : [];
+                const vals = q.AnswerValues ? String(q.AnswerValues).split(',') : [];
+                const answerIndex = opts.map(o => o.trim()).indexOf(answer);
 
-                const answerIndex = answerOptions.map(o => o.trim()).indexOf(answer);
-
-                if (answerIndex > -1 && q.Category && answerValues.length > answerIndex) {
-                    if (!categoryScores[q.Category]) {
-                        categoryScores[q.Category] = 0;
-                    }
-                    categoryScores[q.Category] += parseInt(answerValues[answerIndex].trim()) || 0;
+                if (answerIndex > -1 && q.Category && vals.length > answerIndex) {
+                    scores[q.Category] = (scores[q.Category] || 0) + (parseInt(vals[answerIndex].trim()) || 0);
                 }
             });
-            userState.categoryScores = categoryScores;
-
-            // Determine primary neurotransmitter
-            if (Object.keys(categoryScores).length > 0) {
-                const topNT = Object.entries(categoryScores).reduce((a, b) => a[1] >= b[1] ? a : b);
-                userState.primaryNeurotransmitter = topNT[0];
+            userState.categoryScores = scores;
+            if (Object.keys(scores).length > 0) {
+                userState.primaryNeurotransmitter = Object.entries(scores).reduce((a, b) => a[1] >= b[1] ? a : b)[0];
             }
         }
         
-        /**
-         * Processes final answers and displays the results page.
-         */
         function displayResults() {
-            // Process LinkedOutcomes from detailed questions
             formRules.questions.filter(q => q.Page === userState.currentPage).forEach(q => {
                 const answer = userState.answers[q.QuestionID];
-                // **FIX:** Add safety checks for spreadsheet data before processing
                 if (q.LinkedOutcome && answer && q.AnswerOptions) {
                     const outcomes = String(q.LinkedOutcome).split(',');
-                    const answerOptions = String(q.AnswerOptions).split(',');
-                    const answerIndex = answerOptions.map(o => o.trim()).indexOf(answer);
+                    const opts = String(q.AnswerOptions).split(',');
+                    const answerIndex = opts.map(o => o.trim()).indexOf(answer);
 
                     if (answerIndex > -1 && outcomes.length > answerIndex && outcomes[answerIndex]) {
-                        const outcomeString = outcomes[answerIndex].trim();
-                        if(outcomeString) {
-                            const [key, ...valueParts] = outcomeString.split(':');
-                            const value = valueParts.join(':').trim();
+                        const outcomeStr = outcomes[answerIndex].trim();
+                        if(outcomeStr) {
+                            const [key, ...valParts] = outcomeStr.split(':');
+                            const value = valParts.join(':').trim();
                             if (key === 'SET_PRIMARY_SUPPLEMENT') userState.remediationData.primarySupplement = value;
                             if (key === 'SET_SECONDARY_SUPPLEMENT') userState.remediationData.secondarySupplement = value;
                             if (key === 'SET_NOTE') userState.remediationData.note = value;
@@ -333,97 +295,54 @@
                     }
                 }
             });
-
-            // Hide form and navigation
-            formContainer.innerHTML = '<p class="text-gray-500 text-center">Results generated below.</p>';
-            navContainer.innerHTML = '';
-            
-            // Build and show results
+            document.getElementById('formContainer').classList.add('hidden');
+            document.getElementById('navigationContainer').classList.add('hidden');
+            document.getElementById('breadcrumbContainer').innerHTML = '<strong>Results</strong>';
+            const resultsContainer = document.getElementById('resultsContainer');
             resultsContainer.innerHTML = buildResultsHTML();
             resultsContainer.classList.remove('hidden');
-
-            // Add event listener for the reset button inside results
-            document.getElementById('resetButton').addEventListener('click', () => {
+            document.getElementById('resetButton-results').onclick = () => {
                 resetState();
                 buildPage(1);
-            });
+            };
         }
 
-        /**
-         * Constructs the complete HTML for the results page.
-         * @returns {string} - The HTML string for the results page.
-         */
         function buildResultsHTML() {
             const primaryNT = userState.primaryNeurotransmitter;
             if (!primaryNT) return '<p>Could not determine a primary focus. Please try the assessment again.</p>';
-
-            const lifestyleActions = formRules.content.filter(c => c.ContentType === 'lifestyle' && c.Category === primaryNT);
+            const lifestyle = formRules.content.filter(c => c.ContentType === 'lifestyle' && c.Category === primaryNT);
             const foundations = formRules.content.filter(c => c.ContentType === 'foundation');
-            const multipleImbalancesRule = formRules.remediation.find(r => r.RuleID === 'MultipleImbalances');
-            const hasMultipleImbalances = Object.values(userState.categoryScores).filter(score => score > 0).length > 1;
+            const multipleRule = formRules.remediation.find(r => r.RuleID === 'MultipleImbalances');
+            const hasMultiple = Object.values(userState.categoryScores).filter(s => s > 0).length > 1;
 
-            let html = `
+            return `
                 <div class="bg-white p-6 sm:p-8 rounded-xl shadow-lg">
                     <div class="text-center mb-6">
                         <h2 class="text-3xl font-bold text-gray-900">Your Personalized Brain Health Plan</h2>
-                        <button id="resetButton" class="mt-2 text-blue-600 hover:underline">Start New Assessment</button>
+                        <button id="resetButton-results" class="mt-2 text-blue-600 hover:underline">Start New Assessment</button>
                     </div>
-
-                    ${hasMultipleImbalances && multipleImbalancesRule ? `
-                    <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 mb-6 rounded-r-lg">
-                        <p><strong>Multiple Neurotransmitter Imbalances Detected:</strong> ${multipleImbalancesRule.ResultMessage}</p>
-                    </div>` : ''}
-
-                    <!-- Recommendations -->
+                    ${hasMultiple && multipleRule ? `<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 mb-6 rounded-r-lg"><p><strong>Multiple Neurotransmitter Imbalances Detected:</strong> ${multipleRule.ResultMessage}</p></div>` : ''}
                     <div class="mb-8">
                         <h3 class="text-2xl font-bold mb-4">Primary Focus: <span class="text-blue-700">${primaryNT}</span></h3>
                         <div class="grid md:grid-cols-2 gap-6">
-                            <div class="bg-green-50 border-l-4 border-green-500 p-4 rounded-r-lg">
-                                <h4 class="font-bold text-green-800">Primary Supplement</h4>
-                                <p class="text-green-700">${userState.remediationData.primarySupplement}</p>
-                            </div>
-                            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
-                                <h4 class="font-bold text-blue-800">Secondary Supplement</h4>
-                                <p class="text-blue-700">${userState.remediationData.secondarySupplement}</p>
-                            </div>
+                            <div class="bg-green-50 border-l-4 border-green-500 p-4 rounded-r-lg"><h4 class="font-bold text-green-800">Primary Supplement</h4><p class="text-green-700">${userState.remediationData.primarySupplement}</p></div>
+                            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg"><h4 class="font-bold text-blue-800">Secondary Supplement</h4><p class="text-blue-700">${userState.remediationData.secondarySupplement}</p></div>
                         </div>
-                        ${userState.remediationData.note ? `
-                        <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 mt-4 rounded-r-lg">
-                            <p><strong>Important Note:</strong> ${userState.remediationData.note}</p>
-                        </div>` : ''}
+                        ${userState.remediationData.note ? `<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 mt-4 rounded-r-lg"><p><strong>Important Note:</strong> ${userState.remediationData.note}</p></div>` : ''}
                     </div>
-
-                    <!-- Lifestyle -->
                     <div class="mb-8">
                         <h3 class="text-2xl font-bold mb-4">Key Lifestyle Actions for ${primaryNT}</h3>
-                        <ul class="list-disc list-inside space-y-2">
-                            ${lifestyleActions.map(action => `<li class="text-gray-700">${action.Content}</li>`).join('')}
-                        </ul>
+                        <ul class="list-disc list-inside space-y-2">${lifestyle.map(a => `<li class="text-gray-700">${a.Content}</li>`).join('')}</ul>
                     </div>
-
-                    <!-- Foundations -->
                     <div>
                         <h3 class="text-2xl font-bold mb-4">Brain Health Foundations</h3>
-                        <div class="space-y-4">
-                        ${foundations.map(f => {
-                            const content = f.Content || '';
-                            const parts = content.split('**Actions:**');
-                            const description = parts[0].replace('**Description:**', '').trim();
-                            const actions = parts.length > 1 ? parts[1].split(';').map(a => a.trim()).join(', ') : '';
-                            return `
-                                <div class="p-4 border rounded-lg">
-                                    <h4 class="font-bold">${f.Category}</h4>
-                                    <p class="text-sm text-gray-600">${description}</p>
-                                    <p class="text-sm text-blue-700 mt-1"><strong>Actions:</strong> ${actions}</p>
-                                </div>`;
-                        }).join('')}
-                        </div>
+                        <div class="space-y-4">${foundations.map(f => {
+                            const c = f.Content || '', parts = c.split('**Actions:**'), desc = parts[0].replace('**Description:**', '').trim(), acts = parts.length > 1 ? parts[1].split(';').map(a => a.trim()).join(', ') : '';
+                            return `<div class="p-4 border rounded-lg"><h4 class="font-bold">${f.Category}</h4><p class="text-sm text-gray-600">${desc}</p><p class="text-sm text-blue-700 mt-1"><strong>Actions:</strong> ${acts}</p></div>`;
+                        }).join('')}</div>
                     </div>
-                </div>
-            `;
-            return html;
+                </div>`;
         }
-
     </script>
 </body>
 </html>
