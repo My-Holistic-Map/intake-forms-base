@@ -98,6 +98,7 @@
          * Fetches and loads a spreadsheet from a given URL.
          * @param {string} url - The path to the .xlsx file.
          */
+        /*
         async function loadFormFromUrl(url) {
             try {
                 mainContent.innerHTML = `<p class="text-center text-lg text-color">Loading assessment...</p>`;
@@ -112,6 +113,46 @@
                 mainContent.innerHTML = `<p class="text-center text-red-500 text-lg">Error: The requested assessment could not be loaded. Please check the 'form' parameter in the URL.</p>`;
             }
         }
+        */
+
+        /**
+         * Fetches and loads a spreadsheet from a given URL.
+         * This version includes extra logging to debug silent failures.
+         * @param {string} url - The path to the .xlsx file.
+         */
+        async function loadFormFromUrl(url) {
+            try {
+                console.log(`[DEBUG] Step 1: Attempting to fetch from URL: ${url}`);
+                mainContent.innerHTML = `<p class="text-center text-lg text-color">Loading assessment...</p>`;
+                
+                const response = await fetch(url);
+                console.log(`[DEBUG] Step 2: Fetch response received. Status: ${response.status}, OK: ${response.ok}`);
+
+                if (!response.ok) {
+                    // This will handle 404 Not Found and other server errors.
+                    throw new Error(`Form not found. Server responded with status: ${response.status}`);
+                }
+                
+                console.log('[DEBUG] Step 3: Response is OK. Reading file data...');
+                const data = await response.arrayBuffer();
+                console.log(`[DEBUG] Step 4: File data received. Size: ${data.byteLength} bytes.`);
+                
+                // If the data is empty, it's a problem.
+                if (data.byteLength === 0) {
+                    throw new Error("The fetched file is empty.");
+                }
+
+                console.log('[DEBUG] Step 5: Processing spreadsheet...');
+                processSpreadsheet(data);
+                console.log('[DEBUG] Step 6: Spreadsheet processing complete.');
+
+            } catch (error) {
+                // This block will catch any error thrown in the try block.
+                console.error("[DEBUG] An error occurred in the loading process:", error);
+                mainContent.innerHTML = `<p class="text-center text-red-600 text-lg font-semibold">Error: Could not load the assessment.</p><p class="text-center text-red-500 mt-2">Please check the browser console for details (Press F12 and click 'Console').</p>`;
+            }
+        }
+
         
         /**
          * Handles the manual file upload from the input element.
