@@ -85,7 +85,7 @@
                 // A form name was found in the URL. Hide the uploader and load the file.
                 uploaderContainer.classList.add('hidden-element');
                 // Assume files are in a /forms/ directory relative to this HTML file.
-                const filePath = `./forms/${formName}.xlsx`; 
+                const filePath = `./forms/sheets/${formName}.xlsx`; 
                 loadFormFromUrl(filePath);
             } else {
                 // --- Testing Mode ---
