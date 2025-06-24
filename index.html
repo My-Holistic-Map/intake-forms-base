@@ -483,13 +483,14 @@
                     } else if (key === 'AdditionalAdviceText') {
                         const adviceParts = [];
                         if (userState.stateVariables.hasHPyloriSymptoms === 'true') {
-                            adviceParts.push((formRules.content.find(c => c.Category === 'HPyloriAdvice') || {}).Content || '');
+                           const advice = (formRules.content.find(c => c.Category === 'HPyloriAdvice') || {}).Content || '';
+                           if(advice) adviceParts.push(advice);
                         }
-                        if (userState.stateVariables.siboSymptoms === 'Yes') {
-                           adviceParts.push((formRules.content.find(c => c.Category === 'SIBOAdvice') || {}).Content || '');
+                        if (userState.answers[3] === 'Yes' || userState.answers[8] === 'Yes') { // SIBO symptoms
+                           const advice = (formRules.content.find(c => c.Category === 'SIBOAdvice') || {}).Content || '';
+                           if(advice) adviceParts.push(advice);
                         }
                         if (userState.stateVariables.additionalAdvice) {
-                           // Clean the hardcoded "Also," from the data
                            const cleanAdvice = userState.stateVariables.additionalAdvice.replace(/^Also,?\s*/i, '');
                            adviceParts.push(cleanAdvice);
                         }
