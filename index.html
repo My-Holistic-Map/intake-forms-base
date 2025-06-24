@@ -342,15 +342,12 @@
                         const [action, ...params] = singleOutcome.trim().split(':');
                         const value = params.join(':');
                         
-                        if (action === 'ADD_SCORE_TO_CATEGORY') {
+                        if (action === 'SET_STATE_VARIABLE') {
+                            const [varName, ...varValueParts] = value.split(':');
+                            userState.stateVariables[varName.trim()] = varValueParts.join(':').trim();
+                        } else if (action === 'ADD_SCORE_TO_CATEGORY' || action === 'INCREMENT_CATEGORY_SCORE') {
                             const [category, score] = value.split(':');
-                            userState.categoryScores[category] = (userState.categoryScores[category] || 0) + parseInt(score);
-                        } else if (action === 'SET_STATE_VARIABLE') {
-                            const [varName, varValue] = value.split(':');
-                            userState.stateVariables[varName] = varValue;
-                        } else if (action === 'INCREMENT_CATEGORY_SCORE') {
-                            const [category, score] = value.split(':');
-                            userState.categoryScores[category] = (userState.categoryScores[category] || 0) + parseInt(score);
+                            userState.categoryScores[category.trim()] = (userState.categoryScores[category.trim()] || 0) + parseInt(score);
                         }
                     });
                 };
@@ -371,23 +368,24 @@
             if (!conditionStr || conditionStr.trim().toUpperCase() === 'ALWAYS_TRUE') return true;
             const conditions = conditionStr.split(';').map(s => s.trim());
             return conditions.some(cond => {
-                const [type, logic] = cond.split(':');
-                if (type.toUpperCase() === 'SCORE') {
-                    const match = logic.match(/(.+) (>=|<=|>|<|=) (.+)/);
-                    if (!match) return false;
-                    const [, category, operator, value] = match.map(s => s.trim());
-                    const score = userState.categoryScores[category] || 0;
-                    return eval(`${score} ${operator} ${value}`);
-                }
-                if (type.toUpperCase() === 'STATE') {
-                    const [varName, varValue] = logic.split('=').map(s => s.trim());
-                    return userState.stateVariables[varName] === varValue;
-                }
+                try {
+                    const [type, logic] = cond.split(':');
+                    if (type.toUpperCase() === 'SCORE') {
+                        const match = logic.match(/(.+?) (>=|<=|>|<|=) (.+)/);
+                        if (!match) return false;
+                        const [, category, operator, value] = match.map(s => s.trim());
+                        const score = userState.categoryScores[category] || 0;
+                        return eval(`${score} ${operator} ${value}`);
+                    }
+                    if (type.toUpperCase() === 'STATE') {
+                        const [varName, varValue] = logic.split('=').map(s => s.trim());
+                        return userState.stateVariables[varName] === varValue;
+                    }
+                } catch(e) { return false; }
                 return false;
             });
         }
         
-        // --- FIX: Upgraded function to handle both simple and complex, template-based remediation ---
         function buildResultsHTML() {
             let html = `<div class="bg-white p-6 sm:p-8 rounded-xl shadow-lg">
                 <h2 class="text-2xl font-bold heading-color mb-6">Your Recommendations</h2>`;
@@ -399,15 +397,16 @@
 
             formRules.remediation.forEach(rule => {
                 if (evaluateCondition(rule.Condition)) {
-                    if (rule.Action) { // Handle simple action-based rules
-                        const content = formRules.content.find(c => c.Category === rule.Action.split(':')[1]);
+                    if (rule.Action) {
+                        const actionType = rule.Action.split(':')[0];
+                        const category = rule.Action.split(':')[1];
+                        const content = formRules.content.find(c => c.Category === category);
                         if (!content) return;
                         
-                        const actionType = rule.Action.split(':')[0];
                         if(actionType === 'SHOW_RESULT_CARD') resultCards.push(content);
                         if(actionType === 'SHOW_SUPPORT_CARD') supportCards.push(content);
                         if(actionType === 'SHOW_NOTE') notes.push(content);
-                    } else if (rule.ResultMessage) { // Handle complex template-based rules
+                    } else if (rule.ResultMessage) {
                          templateResult += processTemplate(rule.ResultMessage);
                     }
                 }
@@ -448,7 +447,7 @@
             return html;
         }
 
-        // --- NEW: Function to process result message templates ---
+        // --- FIX: Rewrote template processing to be safer and more robust ---
         function processTemplate(templateStr) {
             let processedText = templateStr;
             const placeholders = templateStr.match(/\{(.+?)\}/g) || [];
@@ -457,32 +456,48 @@
                 const key = placeholder.replace(/[{}]/g, '');
                 let replacement = '';
                 
-                // Logic for the Bacterial Assessment form specifically
-                if (key === 'PregnancyWarning') {
-                    if (userState.stateVariables.isPregnant === 'true') {
-                        replacement = (formRules.content.find(c => c.Category === 'PregnancyWarning') || {}).Content || '';
-                    }
-                } else if (key === 'RecommendationText') {
-                    const healthConcern = userState.answers[10];
-                    const recData = formRules.content.find(c => c.ContentType === 'HealthConcernRec' && c.Category === healthConcern);
-                    if (recData) {
-                        const primary = recData.Content.match(/\*\*Primary:\*\* (.*?)(?=\s\*\*|$)/)[1];
-                        const options = recData.Content.match(/\*\*Options:\*\* (.*)/)[1].split(',').map(s=>s.trim());
-                        
-                        if (userState.stateVariables.triedBoth === 'true') {
-                            replacement = `Since both strong antimicrobials didn't work, try <strong>${primary}</strong>. If it doesn't work, try <strong>${options[0]}</strong> or <strong>${options[1]}</strong>.`;
-                        } else if (userState.stateVariables.recommendedAntimicrobial) {
-                            replacement = `Try <strong>${userState.stateVariables.recommendedAntimicrobial}</strong> with <strong>${primary}</strong>. If it doesn't work, try <strong>${options[0]}</strong> or <strong>${options[1]}</strong>.`;
-                        } else {
-                            replacement = `Try <strong>${primary}</strong>. If it doesn't work, try <strong>${options[0]}</strong> or <strong>${options[1]}</strong>.`;
+                try {
+                    if (key === 'PregnancyWarning') {
+                        if (userState.stateVariables.isPregnant === 'true') {
+                            replacement = (formRules.content.find(c => c.Category === 'PregnancyWarning') || {}).Content || '';
                         }
+                    } else if (key === 'RecommendationText') {
+                        const healthConcern = userState.answers[10];
+                        const recData = formRules.content.find(c => c.ContentType === 'HealthConcernRec' && c.Category === healthConcern);
+                        
+                        if (recData && recData.Content) {
+                            const primaryMatch = recData.Content.match(/\*\*Primary:\*\* (.*?)(?=\s\*\*|$)/);
+                            const optionsMatch = recData.Content.match(/\*\*Options:\*\* (.*)/);
+
+                            const primary = primaryMatch ? primaryMatch[1].trim() : '';
+                            const options = optionsMatch ? optionsMatch[1].split(',').map(s => s.trim()) : ['', ''];
+                            
+                            if (userState.stateVariables.triedBoth === 'true') {
+                                replacement = `Since both strong antimicrobials didn't work, try <strong>${primary}</strong>. If it doesn't work, try <strong>${options[0]}</strong> or <strong>${options[1]}</strong>.`;
+                            } else if (userState.stateVariables.recommendedAntimicrobial) {
+                                replacement = `Try <strong>${userState.stateVariables.recommendedAntimicrobial}</strong> with <strong>${primary}</strong>. If it doesn't work, try <strong>${options[0]}</strong> or <strong>${options[1]}</strong>.`;
+                            } else {
+                                replacement = `Try <strong>${primary}</strong>. If it doesn't work, try <strong>${options[0]}</strong> or <strong>${options[1]}</strong>.`;
+                            }
+                        }
+                    } else if (key === 'AdditionalAdviceText') {
+                        const adviceParts = [];
+                        if (userState.stateVariables.hasHPyloriSymptoms === 'true') {
+                            adviceParts.push((formRules.content.find(c => c.Category === 'HPyloriAdvice') || {}).Content || '');
+                        }
+                        if (userState.stateVariables.siboSymptoms === 'Yes') {
+                           adviceParts.push((formRules.content.find(c => c.Category === 'SIBOAdvice') || {}).Content || '');
+                        }
+                        if (userState.stateVariables.additionalAdvice) {
+                           // Clean the hardcoded "Also," from the data
+                           const cleanAdvice = userState.stateVariables.additionalAdvice.replace(/^Also,?\s*/i, '');
+                           adviceParts.push(cleanAdvice);
+                        }
+                        replacement = adviceParts.length > 0 ? `<em>${adviceParts.join(' ')}</em>` : '';
                     }
-                } else if (key === 'AdditionalAdviceText') {
-                    let advice = '';
-                    if (userState.stateVariables.hasHPyloriSymptoms === 'true') advice += (formRules.content.find(c => c.Category === 'HPyloriAdvice') || {}).Content || '';
-                    if (userState.stateVariables.siboSymptoms === 'Yes') advice += ` ${(formRules.content.find(c => c.Category === 'SIBOAdvice') || {}).Content || ''}`;
-                    if (userState.stateVariables.additionalAdvice) advice += ` ${userState.stateVariables.additionalAdvice}`;
-                    replacement = advice ? `<em>${advice.trim()}</em>` : '';
+                } catch (e) {
+                    console.error(`Error processing placeholder: ${placeholder}`, e);
+                    replacement = `[Error: ${key}]`;
                 }
                 
                 processedText = processedText.replace(placeholder, replacement);
