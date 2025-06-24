@@ -307,40 +307,25 @@
                 submitBtn.innerText = 'Get Results';
                 submitBtn.className = 'button-primary px-8 py-3 rounded-lg font-bold';
                 submitBtn.disabled = !isPageValid;
-                submitBtn.onclick = displayResults; // --- FIX: Connect to the new displayResults function ---
+                submitBtn.onclick = displayResults;
                 navContainer.appendChild(submitBtn);
             }
         }
         
-        // --- NEW: Full results processing and rendering logic ---
-        
-        /**
-         * Orchestrates the entire results generation process.
-         */
         function displayResults() {
-            // Hide form and navigation
             formContainer.classList.add('hidden-element');
             navContainer.classList.add('hidden-element');
-
-            // Calculate final scores and state based on all answers
             calculateFinalState();
-
-            // Build and display the results HTML
             resultsContainer.innerHTML = buildResultsHTML();
             resultsContainer.classList.remove('hidden-element');
             
-            // Re-add event listener for the new reset button inside results
             const newResetButton = resultsContainer.querySelector('.restart-button');
             if(newResetButton) {
                 newResetButton.onclick = () => { if (lastLoadedData) processSpreadsheet(lastLoadedData); };
             }
         }
 
-        /**
-         * Processes all answers to calculate final scores and state variables.
-         */
         function calculateFinalState() {
-            // Reset scores and state to avoid carry-over issues
             userState.categoryScores = {};
             userState.stateVariables = {};
 
@@ -353,44 +338,38 @@
 
                 const processOutcome = (outcomeStr) => {
                     if (!outcomeStr) return;
-                    const [action, ...params] = outcomeStr.split(':');
-                    const value = params.join(':');
-                    
-                    if (action === 'ADD_SCORE_TO_CATEGORY') {
-                        const [category, score] = value.split(':');
-                        userState.categoryScores[category] = (userState.categoryScores[category] || 0) + parseInt(score);
-                    } else if (action === 'SET_STATE_VARIABLE') {
-                         const [varName, varValue] = value.split(':');
-                         userState.stateVariables[varName] = varValue;
-                    } else if (action === 'INCREMENT_CATEGORY_SCORE') {
-                        const [category, score] = value.split(':');
-                        userState.categoryScores[category] = (userState.categoryScores[category] || 0) + parseInt(score);
-                    }
+                    outcomeStr.split(';').forEach(singleOutcome => {
+                        const [action, ...params] = singleOutcome.trim().split(':');
+                        const value = params.join(':');
+                        
+                        if (action === 'ADD_SCORE_TO_CATEGORY') {
+                            const [category, score] = value.split(':');
+                            userState.categoryScores[category] = (userState.categoryScores[category] || 0) + parseInt(score);
+                        } else if (action === 'SET_STATE_VARIABLE') {
+                            const [varName, varValue] = value.split(':');
+                            userState.stateVariables[varName] = varValue;
+                        } else if (action === 'INCREMENT_CATEGORY_SCORE') {
+                            const [category, score] = value.split(':');
+                            userState.categoryScores[category] = (userState.categoryScores[category] || 0) + parseInt(score);
+                        }
+                    });
                 };
 
-                if (Array.isArray(answer)) { // For multiple-selection
+                if (Array.isArray(answer)) {
                     answer.forEach(ans => {
                         const answerIndex = options.map(o => o.trim()).indexOf(ans);
                         if(answerIndex > -1) processOutcome(outcomes[answerIndex]);
                     });
-                } else { // For multiple-choice and dropdown
+                } else {
                     const answerIndex = options.map(o => o.trim()).indexOf(answer);
                     if(answerIndex > -1) processOutcome(outcomes[answerIndex]);
                 }
             });
         }
         
-        /**
-         * Evaluates a condition string from the RemediationRules sheet.
-         * @param {string} conditionStr - e.g., "SCORE:Lyme > 2" or "STATE:isPregnant=true"
-         * @returns {boolean}
-         */
         function evaluateCondition(conditionStr) {
             if (!conditionStr || conditionStr.trim().toUpperCase() === 'ALWAYS_TRUE') return true;
-
-            // Handle multiple conditions separated by semicolon (ANY must be true)
             const conditions = conditionStr.split(';').map(s => s.trim());
-
             return conditions.some(cond => {
                 const [type, logic] = cond.split(':');
                 if (type.toUpperCase() === 'SCORE') {
@@ -408,9 +387,7 @@
             });
         }
         
-        /**
-         * Builds the final HTML for the results page based on remediation rules.
-         */
+        // --- FIX: Upgraded function to handle both simple and complex, template-based remediation ---
         function buildResultsHTML() {
             let html = `<div class="bg-white p-6 sm:p-8 rounded-xl shadow-lg">
                 <h2 class="text-2xl font-bold heading-color mb-6">Your Recommendations</h2>`;
@@ -418,22 +395,29 @@
             const resultCards = [];
             const supportCards = [];
             const notes = [];
+            let templateResult = '';
 
             formRules.remediation.forEach(rule => {
                 if (evaluateCondition(rule.Condition)) {
-                    const content = formRules.content.find(c => c.Category === rule.Action.split(':')[1]);
-                    if (!content) return;
-                    
-                    const actionType = rule.Action.split(':')[0];
-                    if(actionType === 'SHOW_RESULT_CARD') resultCards.push(content);
-                    if(actionType === 'SHOW_SUPPORT_CARD') supportCards.push(content);
-                    if(actionType === 'SHOW_NOTE') notes.push(content);
+                    if (rule.Action) { // Handle simple action-based rules
+                        const content = formRules.content.find(c => c.Category === rule.Action.split(':')[1]);
+                        if (!content) return;
+                        
+                        const actionType = rule.Action.split(':')[0];
+                        if(actionType === 'SHOW_RESULT_CARD') resultCards.push(content);
+                        if(actionType === 'SHOW_SUPPORT_CARD') supportCards.push(content);
+                        if(actionType === 'SHOW_NOTE') notes.push(content);
+                    } else if (rule.ResultMessage) { // Handle complex template-based rules
+                         templateResult += processTemplate(rule.ResultMessage);
+                    }
                 }
             });
 
-            // Sort product cards by score if applicable
-            resultCards.sort((a,b) => (userState.categoryScores[b.Category] || 0) - (userState.categoryScores[a.Category] || 0));
+            if (templateResult) {
+                html += `<div class="result-card p-4 rounded-lg">${templateResult}</div>`;
+            }
 
+            resultCards.sort((a,b) => (userState.categoryScores[b.Category] || 0) - (userState.categoryScores[a.Category] || 0));
             if (resultCards.length > 0) {
                  html += `<div class="space-y-4 mb-6">`;
                  resultCards.forEach((card, index) => {
@@ -459,18 +443,54 @@
                  html += `</div>`;
             }
 
-            if (resultCards.length === 0 && supportCards.length === 0 && notes.find(n => n.Category === 'NoResultsMessage')) {
-                // Special case if only the "No Results" message should show
-            } else if (resultCards.length === 0 && supportCards.length === 0) {
-                 html += `<p class="text-color">No specific recommendations based on your answers. Please consult a healthcare provider.</p>`;
-            }
-
             html += `<div class="text-center mt-8"><button class="restart-button button-primary px-8 py-3 rounded-lg font-bold">Start Over</button></div>`;
             html += `</div>`;
-
             return html;
         }
-        
+
+        // --- NEW: Function to process result message templates ---
+        function processTemplate(templateStr) {
+            let processedText = templateStr;
+            const placeholders = templateStr.match(/\{(.+?)\}/g) || [];
+
+            placeholders.forEach(placeholder => {
+                const key = placeholder.replace(/[{}]/g, '');
+                let replacement = '';
+                
+                // Logic for the Bacterial Assessment form specifically
+                if (key === 'PregnancyWarning') {
+                    if (userState.stateVariables.isPregnant === 'true') {
+                        replacement = (formRules.content.find(c => c.Category === 'PregnancyWarning') || {}).Content || '';
+                    }
+                } else if (key === 'RecommendationText') {
+                    const healthConcern = userState.answers[10];
+                    const recData = formRules.content.find(c => c.ContentType === 'HealthConcernRec' && c.Category === healthConcern);
+                    if (recData) {
+                        const primary = recData.Content.match(/\*\*Primary:\*\* (.*?)(?=\s\*\*|$)/)[1];
+                        const options = recData.Content.match(/\*\*Options:\*\* (.*)/)[1].split(',').map(s=>s.trim());
+                        
+                        if (userState.stateVariables.triedBoth === 'true') {
+                            replacement = `Since both strong antimicrobials didn't work, try <strong>${primary}</strong>. If it doesn't work, try <strong>${options[0]}</strong> or <strong>${options[1]}</strong>.`;
+                        } else if (userState.stateVariables.recommendedAntimicrobial) {
+                            replacement = `Try <strong>${userState.stateVariables.recommendedAntimicrobial}</strong> with <strong>${primary}</strong>. If it doesn't work, try <strong>${options[0]}</strong> or <strong>${options[1]}</strong>.`;
+                        } else {
+                            replacement = `Try <strong>${primary}</strong>. If it doesn't work, try <strong>${options[0]}</strong> or <strong>${options[1]}</strong>.`;
+                        }
+                    }
+                } else if (key === 'AdditionalAdviceText') {
+                    let advice = '';
+                    if (userState.stateVariables.hasHPyloriSymptoms === 'true') advice += (formRules.content.find(c => c.Category === 'HPyloriAdvice') || {}).Content || '';
+                    if (userState.stateVariables.siboSymptoms === 'Yes') advice += ` ${(formRules.content.find(c => c.Category === 'SIBOAdvice') || {}).Content || ''}`;
+                    if (userState.stateVariables.additionalAdvice) advice += ` ${userState.stateVariables.additionalAdvice}`;
+                    replacement = advice ? `<em>${advice.trim()}</em>` : '';
+                }
+                
+                processedText = processedText.replace(placeholder, replacement);
+            });
+
+            return processedText;
+        }
+
     </script>
 </body>
 </html>
