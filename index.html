@@ -25,6 +25,7 @@
         .question-group legend { color: #a15236; }
         .result-card { background: linear-gradient(135deg, #767034 0%, #483621 100%); color: #fed695; }
         .result-card-top { border: 2px solid #a15236; }
+        .question-wrapper { transition: all 0.3s ease-in-out; }
     </style>
 </head>
 <body class="text-gray-800">
@@ -180,46 +181,54 @@
                 }
             }
         }
-
+        
         function buildPage(pageNum) {
             formContainer.innerHTML = '';
             const questionsForPage = formRules.questions.filter(q => q.Page === pageNum);
-            const groupNames = [...new Set(questionsForPage.map(q => q.QuestionGroup).filter(Boolean))];
-            groupNames.forEach(groupName => {
-                const groupWrapper = document.createElement('fieldset');
-                groupWrapper.className = "question-group p-4 rounded-lg mb-8";
-                groupWrapper.innerHTML = `<legend class="text-xl font-bold px-2">${groupName}</legend>`;
-                questionsForPage.filter(q => q.QuestionGroup === groupName).forEach(q => groupWrapper.appendChild(createQuestionElement(q)));
-                formContainer.appendChild(groupWrapper);
+            
+            let firstUnansweredIndex = questionsForPage.findIndex(q => !userState.answers.hasOwnProperty(q.QuestionID));
+            if (firstUnansweredIndex === -1) {
+                firstUnansweredIndex = questionsForPage.length;
+            }
+
+            questionsForPage.forEach((q, index) => {
+                if (index <= firstUnansweredIndex) {
+                    const questionElement = createQuestionElement(q);
+                    formContainer.appendChild(questionElement);
+                }
             });
-            questionsForPage.filter(q => !q.QuestionGroup).forEach(q => formContainer.appendChild(createQuestionElement(q)));
+
             updateNavigation();
         }
 
+        // --- FIX: Logic updated to visually show the user's saved answers ---
         function createQuestionElement(q) {
             const wrapper = document.createElement('div');
             wrapper.id = `q-wrapper-${q.QuestionID}`;
-            wrapper.className = "mb-6 p-4";
+            wrapper.className = "question-wrapper mb-6 p-4";
             wrapper.innerHTML = `<label class="block text-lg font-semibold text-color mb-3">${q.QuestionText}</label>`;
             const optionsContainer = document.createElement('div');
             optionsContainer.className = 'space-y-2';
             const options = q.AnswerOptions ? String(q.AnswerOptions).split(',') : [];
+            const currentAnswer = userState.answers[q.QuestionID];
 
             if (q.QuestionType === 'multiple-choice' && options.length > 0) {
                  options.forEach(opt => {
                     const cleanOpt = opt.trim();
+                    const isChecked = currentAnswer === cleanOpt;
                     const optionLabel = document.createElement('label');
                     optionLabel.className = 'flex items-center p-3 rounded-lg hover:bg-yellow-200 cursor-pointer';
-                    optionLabel.innerHTML = `<input type="radio" name="question-${q.QuestionID}" value="${cleanOpt}" class="h-5 w-5 text-green-800 focus:ring-green-700 border-gray-500"><span class="ml-3 text-color">${cleanOpt}</span>`;
+                    optionLabel.innerHTML = `<input type="radio" name="question-${q.QuestionID}" value="${cleanOpt}" class="h-5 w-5 text-green-800 focus:ring-green-700 border-gray-500" ${isChecked ? 'checked' : ''}><span class="ml-3 text-color">${cleanOpt}</span>`;
                     optionLabel.querySelector('input').onchange = () => handleAnswerChange(q.QuestionID, cleanOpt);
                     optionsContainer.appendChild(optionLabel);
                 });
             } else if (q.QuestionType === 'multiple-selection' && options.length > 0) {
                 options.forEach(opt => {
                     const cleanOpt = opt.trim();
+                    const isChecked = Array.isArray(currentAnswer) && currentAnswer.includes(cleanOpt);
                     const optionLabel = document.createElement('label');
                     optionLabel.className = 'flex items-center p-3 rounded-lg hover:bg-yellow-200 cursor-pointer';
-                    optionLabel.innerHTML = `<input type="checkbox" name="question-${q.QuestionID}" value="${cleanOpt}" class="h-5 w-5 text-green-800 focus:ring-green-700 border-gray-500 rounded"><span class="ml-3 text-color">${cleanOpt}</span>`;
+                    optionLabel.innerHTML = `<input type="checkbox" name="question-${q.QuestionID}" value="${cleanOpt}" class="h-5 w-5 text-green-800 focus:ring-green-700 border-gray-500 rounded" ${isChecked ? 'checked' : ''}><span class="ml-3 text-color">${cleanOpt}</span>`;
                     optionLabel.querySelector('input').onchange = (e) => handleAnswerChange(q.QuestionID, cleanOpt, e.target.checked);
                     optionsContainer.appendChild(optionLabel);
                 });
@@ -229,11 +238,13 @@
                 select.className = 'w-full max-w-md py-2 px-3 border-2 rounded-lg text-color text-base';
                 select.style.borderColor = '#879683';
                 select.style.backgroundColor = '#fed695';
-                select.innerHTML = `<option value="" disabled selected>Select an option...</option>`;
+                let optionsHTML = `<option value="" disabled ${!currentAnswer ? 'selected' : ''}>Select an option...</option>`;
                 options.forEach(opt => {
                     const cleanOpt = opt.trim();
-                    select.innerHTML += `<option value="${cleanOpt}">${cleanOpt}</option>`;
+                    const isSelected = currentAnswer === cleanOpt;
+                    optionsHTML += `<option value="${cleanOpt}" ${isSelected ? 'selected' : ''}>${cleanOpt}</option>`;
                 });
+                select.innerHTML = optionsHTML;
                 select.onchange = () => handleAnswerChange(q.QuestionID, select.value);
                 optionsContainer.appendChild(select);
             } else {
@@ -242,7 +253,7 @@
             wrapper.appendChild(optionsContainer);
             return wrapper;
         }
-
+        
         function handleAnswerChange(questionId, value, isChecked) {
             const question = formRules.questions.find(q => q.QuestionID === questionId);
             if (!question) return;
@@ -251,32 +262,30 @@
                 if (!userState.answers[questionId]) userState.answers[questionId] = [];
                 const currentAnswers = userState.answers[questionId];
                 if (isChecked) {
-                    currentAnswers.push(value);
+                    if (!currentAnswers.includes(value)) currentAnswers.push(value);
                 } else {
                     userState.answers[questionId] = currentAnswers.filter(ans => ans !== value);
                 }
             } else {
                 userState.answers[questionId] = value;
             }
-            updateNavigation();
+            buildPage(userState.currentPage);
         }
 
         function checkPageValidity() {
             const questionsOnPage = formRules.questions.filter(q => q.Page === userState.currentPage);
-            for (const q of questionsOnPage) {
+            return questionsOnPage.every(q => {
                 if (q.IsRequired) {
                     const answer = userState.answers[q.QuestionID];
-                    if (!answer || (Array.isArray(answer) && answer.length === 0)) {
-                        return false; 
-                    }
+                    return answer && (!Array.isArray(answer) || answer.length > 0);
                 }
-            }
-            return true;
+                return true;
+            });
         }
 
         function updateNavigation() {
             navContainer.innerHTML = '';
-            const maxPage = Math.max(...formRules.pages.map(p => p.PageNumber));
+            const maxPage = Math.max(...formRules.pages.map(p => p.PageNumber), 1);
             const isPageValid = checkPageValidity();
 
             if (userState.currentPage > 1) {
@@ -447,7 +456,6 @@
             return html;
         }
 
-        // --- FIX: Rewrote template processing to be safer and more robust ---
         function processTemplate(templateStr) {
             let processedText = templateStr;
             const placeholders = templateStr.match(/\{(.+?)\}/g) || [];
@@ -486,7 +494,7 @@
                            const advice = (formRules.content.find(c => c.Category === 'HPyloriAdvice') || {}).Content || '';
                            if(advice) adviceParts.push(advice);
                         }
-                        if (userState.answers[3] === 'Yes' || userState.answers[8] === 'Yes') { // SIBO symptoms
+                        if (userState.answers[3] === 'Yes' || userState.answers[8] === 'Yes') {
                            const advice = (formRules.content.find(c => c.Category === 'SIBOAdvice') || {}).Content || '';
                            if(advice) adviceParts.push(advice);
                         }
