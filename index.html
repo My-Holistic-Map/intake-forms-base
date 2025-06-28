@@ -184,19 +184,6 @@
         
         function buildPage(pageNum) {
             formContainer.innerHTML = '';
-            
-            // Special handling for Dysbiosis form staged question generation
-            const isDysbiosis = (formRules.remediation.find(r => r.Action === 'CALCULATE_DYSBIOSIS_RECS'));
-            if(isDysbiosis && pageNum > 1) {
-                const allPreviousSymptoms = Object.values(userState.answers).flat();
-                if(pageNum === 2) {
-                     // Dynamically create stage 2 questions
-                     // This logic would need to be fleshed out based on the JS file provided
-                } else if(pageNum === 3) {
-                     // Dynamically create stage 3 questions
-                }
-            }
-            
             const questionsForPage = formRules.questions.filter(q => q.Page === pageNum);
             
             const uniqueQuestionTexts = [...new Set(questionsForPage.map(q => q.QuestionText))];
@@ -205,13 +192,11 @@
                 const questionSet = questionsForPage.filter(q => q.QuestionText === qText);
                 const firstQuestion = questionSet[0];
 
-                // If it's a normal question with no grouping
                 if (questionSet.length === 1 && !firstQuestion.QuestionGroup) {
                     formContainer.appendChild(createQuestionElement(firstQuestion));
                     return;
                 }
 
-                // If it's a categorized question
                 const megaQuestionWrapper = document.createElement('div');
                 megaQuestionWrapper.id = `q-wrapper-${firstQuestion.QuestionID}`;
                 megaQuestionWrapper.className = "question-wrapper mb-6 p-4";
@@ -438,6 +423,7 @@
             });
         }
         
+        // --- FIX: Updated to include Food Sensitivity logic ---
         function buildResultsHTML() {
             let html = `<div class="bg-white p-6 sm:p-8 rounded-xl shadow-lg">
                 <h2 class="text-2xl font-bold heading-color mb-6">Your Recommendations</h2>`;
@@ -445,10 +431,10 @@
             const triggeredRule = formRules.remediation.find(rule => evaluateCondition(rule.Condition));
 
             if (triggeredRule && triggeredRule.Action) {
-                if (triggeredRule.Action === 'CALCULATE_DYSBIOSIS_RECS') {
-                    html += calculateDysbiosisRecsHTML();
+                if (triggeredRule.Action === 'CALCULATE_FOOD_SENSITIVITY_RECS') {
+                    html += calculateFoodSensitivityRecsHTML();
                 } else {
-                     // Default logic for other forms
+                    // Logic for other forms...
                 }
             }
             
@@ -456,48 +442,56 @@
             html += `</div>`;
             return html;
         }
-
-        // --- NEW: Custom calculation logic specifically for the Dysbiosis Identifier ---
-        function calculateDysbiosisRecsHTML() {
+        
+        // --- NEW: Custom calculation logic specifically for the Food Sensitivity Assessment ---
+        function calculateFoodSensitivityRecsHTML() {
             let html = '';
-            const scores = {};
-            const allSymptoms = Object.values(userState.answers).flat();
+            const scores = userState.categoryScores;
+            const sortedScores = Object.entries(scores).sort((a,b) => b[1] - a[1]);
+
+            const highRisk = sortedScores.filter(([, score]) => score >= 4);
+            const mediumRisk = sortedScores.filter(([, score]) => score >= 2 && score < 4);
+            const lowRisk = sortedScores.filter(([, score]) => score > 0 && score < 2);
             
-            const infectionMap = {};
-            formRules.content.filter(c => c.ContentType === 'InfectionMap').forEach(row => {
-                infectionMap[row.Category] = String(row.Content).split(',');
-            });
-            
-            for (const type in infectionMap) {
-                scores[type] = 0;
-                allSymptoms.forEach(symptom => {
-                    if (infectionMap[type].includes(symptom)) {
-                        scores[type]++;
-                    }
+            const renderTier = (title, foodGroups, color) => {
+                if (foodGroups.length === 0) return '';
+                let tierHTML = `<div class="mb-6 p-4 rounded border-2" style="border-color:${color};">
+                                <h3 class="text-lg font-medium mb-3" style="color:${color};">${title}</h3>`;
+                tierHTML += `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">`;
+                foodGroups.forEach(([foodGroup, score]) => {
+                    const examples = (formRules.content.find(c => c.Category === foodGroup) || {}).Content || 'No examples found.';
+                    tierHTML += `<div class="p-3 rounded border" style="border-color:${color};">
+                                    <div class="font-medium mb-2 text-color">${foodGroup} (Score: ${score})</div>
+                                    <div class="text-sm text-color">${examples.replace(/\*\*Examples:\*\* /g, '<strong>Avoid:</strong> ')}</div>
+                                 </div>`;
                 });
+                tierHTML += `</div></div>`;
+                return tierHTML;
+            };
+
+            html += renderTier('🔴 High Priority - Eliminate First (Weeks 1-3)', highRisk, '#a15236');
+            html += renderTier('🟡 Medium Priority - Test After High Priority (Weeks 4-6)', mediumRisk, '#767034');
+            html += renderTier('🟢 Lower Priority - Monitor', lowRisk, '#879683');
+            
+            // Add notes
+            const elimProtocol = formRules.content.find(c=>c.Category === 'EliminationProtocol');
+            if(elimProtocol) {
+                html += `<div class="p-4 rounded border my-6" style="background-color: #879683; border-color: #404e2c;">
+                            <h3 class="font-medium mb-2" style="color: #fed695;">📋 Your Elimination Diet Protocol:</h3>
+                            <ol class="list-decimal pl-5 space-y-2 text-sm" style="color: #fed695;">
+                                ${elimProtocol.Content.split(';').map(item => `<li>${item}</li>`).join('')}
+                            </ol>
+                         </div>`;
             }
-
-            const maxScore = Math.max(...Object.values(scores));
-            if (maxScore < 3) {
-                return `<p>${(formRules.content.find(c=>c.Category === 'LowConfidence') || {}).Content || 'Low confidence assessment.'}</p>`;
+            const importantNotes = formRules.content.find(c=>c.Category === 'ImportantNotes');
+            if(importantNotes) {
+                html += `<div class="p-4 rounded border" style="background: linear-gradient(135deg, #767034 0%, #483621 100%); border-color: #404e2c;">
+                            <h3 class="font-medium mb-2" style="color: #fed695;">⚠️ Important Notes:</h3>
+                            <ul class="list-disc pl-5 space-y-1 text-sm" style="color: #fed695;">
+                                ${importantNotes.Content.split(';').map(item => `<li>${item}</li>`).join('')}
+                            </ul>
+                         </div>`;
             }
-
-            const topTypes = Object.entries(scores).filter(([, score]) => score === maxScore).map(([type]) => type);
-            html += `<p>Most likely: <strong class="result-type">${topTypes.join(", ")}</strong></p>`;
-
-            html += '<div class="result-section"><h4>Confidence Analysis</h4>';
-            Object.entries(scores).sort(([,a], [,b]) => b-a).forEach(([type, score]) => {
-                const totalSymptomsForType = infectionMap[type].length;
-                const percent = totalSymptomsForType > 0 ? Math.round((score / totalSymptomsForType) * 100) : 0;
-                const barClass = percent >= 50 ? 'confidence-high' : percent >= 25 ? 'confidence-medium' : 'confidence-low';
-                html += `
-                    <p><strong>${type}:</strong> ${score}/${totalSymptomsForType} symptoms (${percent}%)</p>
-                    <div class="confidence-bar">
-                        <div class="confidence-fill ${barClass}" style="width: ${percent}%;">${percent >= 15 ? percent + '%' : ''}</div>
-                    </div>
-                `;
-            });
-            html += '</div>';
 
             return html;
         }
