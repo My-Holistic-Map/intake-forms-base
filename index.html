@@ -182,31 +182,56 @@
             }
         }
         
+        // --- NEW: Updated buildPage to handle categorized questions ---
         function buildPage(pageNum) {
             formContainer.innerHTML = '';
             const questionsForPage = formRules.questions.filter(q => q.Page === pageNum);
             
-            let firstUnansweredIndex = questionsForPage.findIndex(q => !userState.answers.hasOwnProperty(q.QuestionID));
-            if (firstUnansweredIndex === -1) {
-                firstUnansweredIndex = questionsForPage.length;
-            }
-
-            questionsForPage.forEach((q, index) => {
-                if (index <= firstUnansweredIndex) {
-                    const questionElement = createQuestionElement(q);
-                    formContainer.appendChild(questionElement);
+            const uniqueQuestionTexts = [...new Set(questionsForPage.map(q => q.QuestionText))];
+            
+            uniqueQuestionTexts.forEach(qText => {
+                const questionSet = questionsForPage.filter(q => q.QuestionText === qText);
+                const firstQuestion = questionSet[0];
+                
+                // For a normal question, just create it
+                if (questionSet.length === 1) {
+                    formContainer.appendChild(createQuestionElement(firstQuestion));
+                    return;
                 }
+
+                // For a categorized question, create a container and then the groups
+                const megaQuestionWrapper = document.createElement('div');
+                megaQuestionWrapper.id = `q-wrapper-${firstQuestion.QuestionID}`;
+                megaQuestionWrapper.className = "question-wrapper mb-6 p-4";
+                megaQuestionWrapper.innerHTML = `<label class="block text-lg font-semibold text-color mb-3">${firstQuestion.QuestionText}</label>`;
+                
+                questionSet.forEach(q => {
+                    const groupWrapper = document.createElement('div');
+                    groupWrapper.className = 'mb-4';
+                    if (q.QuestionGroup) {
+                        groupWrapper.innerHTML = `<h4 class="text-md font-semibold text-color mb-2">${q.QuestionGroup}</h4>`;
+                    }
+                    const optionsContainer = createOptionsElement(q);
+                    groupWrapper.appendChild(optionsContainer);
+                    megaQuestionWrapper.appendChild(groupWrapper);
+                });
+                formContainer.appendChild(megaQuestionWrapper);
             });
 
             updateNavigation();
         }
 
-        // --- FIX: Logic updated to visually show the user's saved answers ---
         function createQuestionElement(q) {
             const wrapper = document.createElement('div');
             wrapper.id = `q-wrapper-${q.QuestionID}`;
             wrapper.className = "question-wrapper mb-6 p-4";
             wrapper.innerHTML = `<label class="block text-lg font-semibold text-color mb-3">${q.QuestionText}</label>`;
+            const optionsContainer = createOptionsElement(q);
+            wrapper.appendChild(optionsContainer);
+            return wrapper;
+        }
+
+        function createOptionsElement(q) {
             const optionsContainer = document.createElement('div');
             optionsContainer.className = 'space-y-2';
             const options = q.AnswerOptions ? String(q.AnswerOptions).split(',') : [];
@@ -250,8 +275,7 @@
             } else {
                 optionsContainer.innerHTML = `<p class="text-red-500 text-sm">Config Error: Question ID ${q.QuestionID} is missing AnswerOptions.</p>`;
             }
-            wrapper.appendChild(optionsContainer);
-            return wrapper;
+            return optionsContainer;
         }
         
         function handleAnswerChange(questionId, value, isChecked) {
@@ -269,7 +293,7 @@
             } else {
                 userState.answers[questionId] = value;
             }
-            buildPage(userState.currentPage);
+            updateNavigation();
         }
 
         function checkPageValidity() {
@@ -351,7 +375,7 @@
                         const [action, ...params] = singleOutcome.trim().split(':');
                         const value = params.join(':');
                         
-                        if (action === 'SET_STATE_VARIABLE') {
+                        if (action === 'SET_STATE_VARIABLE' || action === 'SET_PATH' || action === 'SET_ANSWER') {
                             const [varName, ...varValueParts] = value.split(':');
                             userState.stateVariables[varName.trim()] = varValueParts.join(':').trim();
                         } else if (action === 'ADD_SCORE_TO_CATEGORY' || action === 'INCREMENT_CATEGORY_SCORE') {
@@ -395,6 +419,7 @@
             });
         }
         
+        // --- NEW: Updated buildResultsHTML to handle dynamic filtering ---
         function buildResultsHTML() {
             let html = `<div class="bg-white p-6 sm:p-8 rounded-xl shadow-lg">
                 <h2 class="text-2xl font-bold heading-color mb-6">Your Recommendations</h2>`;
@@ -402,48 +427,36 @@
             const resultCards = [];
             const supportCards = [];
             const notes = [];
-            let templateResult = '';
 
             formRules.remediation.forEach(rule => {
                 if (evaluateCondition(rule.Condition)) {
-                    if (rule.Action) {
-                        const actionType = rule.Action.split(':')[0];
+                    if (rule.Action.startsWith('SHOW_RESULT_CARD')) {
                         const category = rule.Action.split(':')[1];
-                        const content = formRules.content.find(c => c.Category === category);
-                        if (!content) return;
-                        
-                        if(actionType === 'SHOW_RESULT_CARD') resultCards.push(content);
-                        if(actionType === 'SHOW_SUPPORT_CARD') supportCards.push(content);
-                        if(actionType === 'SHOW_NOTE') notes.push(content);
-                    } else if (rule.ResultMessage) {
-                         templateResult += processTemplate(rule.ResultMessage);
+                        const cardData = formRules.content.find(c => c.Category === category);
+                        if (cardData) resultCards.push(cardData);
+                    } else if (rule.Action.startsWith('SHOW_NOTE')) {
+                        const category = rule.Action.split(':')[1];
+                        const noteData = formRules.content.find(c => c.Category === category);
+                        if (noteData) notes.push(noteData);
                     }
                 }
             });
 
-            if (templateResult) {
-                html += `<div class="result-card p-4 rounded-lg">${templateResult}</div>`;
-            }
-
-            resultCards.sort((a,b) => (userState.categoryScores[b.Category] || 0) - (userState.categoryScores[a.Category] || 0));
             if (resultCards.length > 0) {
                  html += `<div class="space-y-4 mb-6">`;
                  resultCards.forEach((card, index) => {
-                     html += `<div class="result-card p-4 rounded-lg ${index === 0 ? 'result-card-top' : ''}">${card.Content.replace(/\*\*(.*?)\*\*/g, '<br><strong>$1</strong>')}</div>`;
+                    const cardContent = parseAndFilterResultCard(card.Content);
+                    html += `<div class="result-card p-4 rounded-lg">
+                                ${cardContent.primary}
+                                ${cardContent.supporting}
+                                ${cardContent.protocol}
+                                ${cardContent.note}
+                             </div>`;
                  });
                  html += `</div>`;
             }
 
-            if (supportCards.length > 0) {
-                 html += `<h3 class="text-xl font-semibold heading-color mt-6 mb-4">Additional Support</h3>
-                          <div class="space-y-4 mb-6">`;
-                 supportCards.forEach(card => {
-                     html += `<div class="bg-gray-200 p-4 rounded-lg text-color">${card.Content.replace(/\*\*(.*?)\*\*/g, '<br><strong>$1</strong>')}</div>`;
-                 });
-                 html += `</div>`;
-            }
-
-             if (notes.length > 0) {
+            if (notes.length > 0) {
                  html += `<div class="space-y-4">`;
                  notes.forEach(note => {
                      html += `<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded-r-lg">${note.Content}</div>`;
@@ -456,65 +469,52 @@
             return html;
         }
 
-        function processTemplate(templateStr) {
-            let processedText = templateStr;
-            const placeholders = templateStr.match(/\{(.+?)\}/g) || [];
-
-            placeholders.forEach(placeholder => {
-                const key = placeholder.replace(/[{}]/g, '');
-                let replacement = '';
-                
-                try {
-                    if (key === 'PregnancyWarning') {
-                        if (userState.stateVariables.isPregnant === 'true') {
-                            replacement = (formRules.content.find(c => c.Category === 'PregnancyWarning') || {}).Content || '';
-                        }
-                    } else if (key === 'RecommendationText') {
-                        const healthConcern = userState.answers[10];
-                        const recData = formRules.content.find(c => c.ContentType === 'HealthConcernRec' && c.Category === healthConcern);
-                        
-                        if (recData && recData.Content) {
-                            const primaryMatch = recData.Content.match(/\*\*Primary:\*\* (.*?)(?=\s\*\*|$)/);
-                            const optionsMatch = recData.Content.match(/\*\*Options:\*\* (.*)/);
-
-                            const primary = primaryMatch ? primaryMatch[1].trim() : '';
-                            const options = optionsMatch ? optionsMatch[1].split(',').map(s => s.trim()) : ['', ''];
-                            
-                            if (userState.stateVariables.triedBoth === 'true') {
-                                replacement = `Since both strong antimicrobials didn't work, try <strong>${primary}</strong>. If it doesn't work, try <strong>${options[0]}</strong> or <strong>${options[1]}</strong>.`;
-                            } else if (userState.stateVariables.recommendedAntimicrobial) {
-                                replacement = `Try <strong>${userState.stateVariables.recommendedAntimicrobial}</strong> with <strong>${primary}</strong>. If it doesn't work, try <strong>${options[0]}</strong> or <strong>${options[1]}</strong>.`;
-                            } else {
-                                replacement = `Try <strong>${primary}</strong>. If it doesn't work, try <strong>${options[0]}</strong> or <strong>${options[1]}</strong>.`;
-                            }
-                        }
-                    } else if (key === 'AdditionalAdviceText') {
-                        const adviceParts = [];
-                        if (userState.stateVariables.hasHPyloriSymptoms === 'true') {
-                           const advice = (formRules.content.find(c => c.Category === 'HPyloriAdvice') || {}).Content || '';
-                           if(advice) adviceParts.push(advice);
-                        }
-                        if (userState.answers[3] === 'Yes' || userState.answers[8] === 'Yes') {
-                           const advice = (formRules.content.find(c => c.Category === 'SIBOAdvice') || {}).Content || '';
-                           if(advice) adviceParts.push(advice);
-                        }
-                        if (userState.stateVariables.additionalAdvice) {
-                           const cleanAdvice = userState.stateVariables.additionalAdvice.replace(/^Also,?\s*/i, '');
-                           adviceParts.push(cleanAdvice);
-                        }
-                        replacement = adviceParts.length > 0 ? `<em>${adviceParts.join(' ')}</em>` : '';
-                    }
-                } catch (e) {
-                    console.error(`Error processing placeholder: ${placeholder}`, e);
-                    replacement = `[Error: ${key}]`;
+        // --- NEW: Helper function to parse result cards and apply filters ---
+        function parseAndFilterResultCard(contentString) {
+            const getPart = (key) => (contentString.match(new RegExp(`\\*\\*${key}:\\*\\* (.*?)(?=\\s\\*\\*|$)`)) || [])[1] || '';
+            
+            let primaryProducts = getPart('Primary Products').split(',').map(p => p.trim());
+            const supportingProtocolKey = getPart('Supporting Protocol');
+            const note = getPart('Note');
+            const protocol = getPart('Protocol');
+            const medFilterRules = getPart('Medication Filter').split(';').map(r => r.trim()).filter(Boolean);
+            
+            // Apply medication filter
+            const userMeds = userState.answers[10] || [];
+            medFilterRules.forEach(rule => {
+                const [med, productToRemove] = rule.split(':').map(s => s.trim());
+                if(userMeds.includes(med)) {
+                    primaryProducts = primaryProducts.filter(p => p !== productToRemove);
                 }
-                
-                processedText = processedText.replace(placeholder, replacement);
             });
 
-            return processedText;
-        }
+            // Build HTML parts
+            let primaryHTML = '<div>';
+            if (primaryProducts.length > 0) {
+                primaryHTML += `<h4 class="font-bold mb-2">Primary Products:</h4><ul class="list-disc list-inside">`;
+                primaryProducts.forEach(productName => {
+                    const productInfo = formRules.content.find(c => c.ContentType === 'ProductInfo' && c.Category === productName);
+                    primaryHTML += `<li><strong>${productName}</strong>: ${(productInfo || {}).Content || ''}</li>`;
+                });
+                primaryHTML += '</ul>';
+            }
+            primaryHTML += '</div>';
 
+            let supportingHTML = '';
+            if (supportingProtocolKey) {
+                const supportingData = (formRules.content.find(c => c.Category === supportingProtocolKey) || {}).Content || '';
+                supportingHTML += `<div class="mt-4"><h4 class="font-bold mb-2">Supporting Protocol:</h4><ul class="list-disc list-inside">`;
+                supportingData.split(';').forEach(item => {
+                    supportingHTML += `<li>${item.trim()}</li>`;
+                });
+                supportingHTML += '</ul></div>';
+            }
+            
+            const noteHTML = note ? `<div class="mt-4 bg-yellow-200 text-yellow-800 p-2 rounded"><strong>Note:</strong> ${note}</div>` : '';
+            const protocolHTML = protocol ? `<div class="mt-4"><h4 class="font-bold mb-2">Protocol:</h4><p>${protocol}</p></div>` : '';
+            
+            return { primary: primaryHTML, supporting: supportingHTML, note: noteHTML, protocol: protocolHTML };
+        }
     </script>
 </body>
 </html>
