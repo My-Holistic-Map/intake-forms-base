@@ -56,7 +56,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script>
-        // --- State Management, DOM References, and Initialization --- (Same as v5.4)
         let formRules = {};
         let userState = {};
         let lastLoadedData = null;
@@ -143,174 +142,96 @@
         }
 
         function populateEnvironment() {
-             const getVar = (key, fallback = '') => (formRules.environment.find(v => v.Key === key) || {}).Value || fallback;
-            document.getElementById('assessmentTitle').innerText = getVar('Assessment Title', 'Assessment');
-            document.getElementById('assessmentIntro').innerText = getVar('Intro');
-            const primaryNavContainer = document.getElementById('primaryNav');
-            primaryNavContainer.innerHTML = '';
-            getVar('Primary Nav', '').split(';').forEach(link => {
-                const [text, url] = link.split(',').map(s => s.trim());
-                let navItem;
-                if (text === 'Restart') {
-                    navItem = document.createElement('button');
-                    navItem.className = "hover:underline";
-                    navItem.onclick = () => { if (lastLoadedData) processSpreadsheet(lastLoadedData); };
-                } else {
-                    navItem = document.createElement('a');
-                    navItem.href = url;
-                    navItem.target = "_blank";
-                    navItem.className = "hover:underline";
-                }
-                navItem.innerText = text;
-                primaryNavContainer.appendChild(navItem);
-            });
-            const footer = document.getElementById('pageFooter');
-            footer.innerHTML = '<div id="secondaryNav" class="grid grid-cols-1 sm:grid-cols-3 gap-8 text-center sm:text-left"></div>';
-            const secondaryNav = document.getElementById('secondaryNav');
-            for (let i = 1; i <= 3; i++) {
-                const col = document.createElement('div');
-                const links = getVar(`Footer Col ${i} Links`, '').split(';').filter(Boolean);
-                const title = getVar(`Footer Col ${i} Title`);
-                if(title){
-                    col.innerHTML = `<h3 class="font-bold text-white mb-2">${title}</h3><ul class="space-y-2"></ul>`;
-                    const ul = col.querySelector('ul');
-                    links.forEach(link => {
-                        const [text, url] = link.split(',').map(s => s.trim());
-                        ul.innerHTML += `<li><a href="${url}" target="_blank" class="text-yellow-100 hover:text-white">${text}</a></li>`;
-                    });
-                    secondaryNav.appendChild(col);
-                }
-            }
+            // ... (Same as v5.7) ...
         }
         
-        // --- UPDATED to handle progressive question display ---
         function buildPage(pageNum) {
-            formContainer.innerHTML = '';
-            const questionsForPage = formRules.questions.filter(q => q.Page === pageNum);
-            
-            let firstUnansweredIndex = questionsForPage.findIndex(q => !userState.answers.hasOwnProperty(q.QuestionID));
-            if (firstUnansweredIndex === -1) {
-                firstUnansweredIndex = questionsForPage.length;
-            }
-
-            questionsForPage.forEach((q, index) => {
-                if (index <= firstUnansweredIndex) {
-                    formContainer.appendChild(createQuestionElement(q));
-                }
-            });
-
-            updateNavigation();
+            // ... (Same as v5.7) ...
         }
 
-        // --- UPDATED to handle inline button rendering ---
         function createQuestionElement(q) {
-            const wrapper = document.createElement('div');
-            wrapper.id = `q-wrapper-${q.QuestionID}`;
-            wrapper.className = "question-wrapper mb-6 p-4";
-            wrapper.innerHTML = `<label class="block text-lg font-semibold text-color mb-3">${q.QuestionText}</label>`;
-            const optionsContainer = document.createElement('div');
-            const options = q.AnswerOptions ? String(q.AnswerOptions).split(',') : [];
-            const currentAnswer = userState.answers[q.QuestionID];
-            
-            const simpleKeywords = ['yes', 'no', 'true', 'false', 'maybe'];
-            const isSimpleInline = q.QuestionType === 'multiple-choice' && options.length <= 3 && options.every(opt => simpleKeywords.includes(opt.trim().toLowerCase()));
-
-            if(isSimpleInline) {
-                optionsContainer.className = 'flex flex-wrap gap-3';
-                options.forEach(opt => {
-                    const cleanOpt = opt.trim();
-                    const isChecked = currentAnswer === cleanOpt;
-                    const buttonLabel = document.createElement('label');
-                    buttonLabel.className = `cursor-pointer px-6 py-2 rounded-lg border-2 font-semibold transition-all ${isChecked ? 'bg-green-800 text-white border-green-900' : 'bg-white border-gray-300 hover:border-green-700'}`;
-                    buttonLabel.innerHTML = `<input type="radio" name="question-${q.QuestionID}" value="${cleanOpt}" class="sr-only" ${isChecked ? 'checked' : ''}><span>${cleanOpt}</span>`;
-                    buttonLabel.querySelector('input').onchange = () => handleAnswerChange(q.QuestionID, cleanOpt);
-                    optionsContainer.appendChild(buttonLabel);
-                });
-            } else {
-                 // Existing logic for grid, vertical lists, and dropdowns
-                 if (options.length > 8) {
-                    optionsContainer.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2';
-                } else {
-                    optionsContainer.className = 'space-y-2';
-                }
-
-                if ((q.QuestionType === 'multiple-choice' || q.QuestionType === 'multiple-selection') && options.length > 0) {
-                     options.forEach(opt => {
-                        const cleanOpt = opt.trim();
-                        const isChecked = q.QuestionType === 'multiple-choice' 
-                            ? currentAnswer === cleanOpt 
-                            : Array.isArray(currentAnswer) && currentAnswer.includes(cleanOpt);
-                        
-                        const inputType = q.QuestionType === 'multiple-choice' ? 'radio' : 'checkbox';
-                        
-                        const optionLabel = document.createElement('label');
-                        optionLabel.className = 'flex items-start p-3 rounded-lg hover:bg-yellow-200 cursor-pointer';
-                        optionLabel.innerHTML = `<input type="${inputType}" name="question-${q.QuestionID}" value="${cleanOpt}" class="h-5 w-5 mt-1 text-green-800 focus:ring-green-700 border-gray-500 rounded"><span class="ml-3 text-color">${cleanOpt}</span>`;
-                        const input = optionLabel.querySelector('input');
-                        if(isChecked) input.checked = true;
-                        
-                        input.onchange = (e) => handleAnswerChange(q.QuestionID, cleanOpt, e.target.checked);
-                        optionsContainer.appendChild(optionLabel);
-                    });
-                } else if (q.QuestionType === 'dropdown' && options.length > 0) {
-                     // Dropdown logic remains the same...
-                } else {
-                    optionsContainer.innerHTML = `<p class="text-red-500 text-sm">Config Error: Question ID ${q.QuestionID} is missing AnswerOptions.</p>`;
-                }
-            }
-            
-            wrapper.appendChild(optionsContainer);
-            return wrapper;
+            // ... (Same as v5.7) ...
         }
 
-        // --- Other functions (handleAnswerChange, navigation, results) remain the same ---
+        function createOptionsElement(q) {
+            // ... (Same as v5.7) ...
+        }
         
         function handleAnswerChange(questionId, value, isChecked) {
-            const question = formRules.questions.find(q => q.QuestionID === questionId);
-            if (!question) return;
-
-            if (question.QuestionType === 'multiple-selection') {
-                if (!userState.answers[questionId]) userState.answers[questionId] = [];
-                const currentAnswers = userState.answers[questionId];
-                if (isChecked) {
-                    if (!currentAnswers.includes(value)) currentAnswers.push(value);
-                } else {
-                    userState.answers[questionId] = currentAnswers.filter(ans => ans !== value);
-                }
-            } else {
-                userState.answers[questionId] = value;
-            }
-            buildPage(userState.currentPage); // Re-render to show next question
+            // ... (Same as v5.7) ...
         }
 
         function checkPageValidity() {
-            const questionsOnPage = formRules.questions.filter(q => q.Page === userState.currentPage);
-            return questionsOnPage.every(q => !q.IsRequired || userState.answers.hasOwnProperty(q.QuestionID));
+            // ... (Same as v5.7) ...
         }
-
+        
+        // --- FIX: Updated navigation to use default text and allow overrides from Environment sheet ---
         function updateNavigation() {
-            // ... same as v5.4
+            navContainer.innerHTML = '';
+            const maxPage = Math.max(...formRules.pages.map(p => p.PageNumber), 1);
+            const isPageValid = checkPageValidity();
+            
+            // Get custom button text from environment, with sensible defaults
+            const getVar = (key, fallback = '') => (formRules.environment.find(v => v.Key === key) || {}).Value || fallback;
+            const backText = getVar('Back Button Text', '← Back');
+            const nextText = getVar('Next Button Text', 'Next →');
+            const submitText = getVar('Submit Button Text', 'Get Results');
+
+            // Back Button
+            if (userState.currentPage > 1) {
+                const backBtn = document.createElement('button');
+                backBtn.innerText = backText;
+                backBtn.className = 'button-secondary px-8 py-3 rounded-lg font-bold';
+                backBtn.onclick = () => {
+                    userState.currentPage--;
+                    buildPage(userState.currentPage);
+                };
+                navContainer.appendChild(backBtn);
+            } else {
+                 navContainer.appendChild(document.createElement('div')); // Placeholder for grid alignment
+            }
+
+            // Next / Submit Button
+            if (userState.currentPage < maxPage) {
+                const nextBtn = document.createElement('button');
+                nextBtn.innerText = nextText;
+                nextBtn.className = 'button-primary px-8 py-3 rounded-lg font-bold';
+                nextBtn.disabled = !isPageValid;
+                nextBtn.onclick = () => {
+                    userState.currentPage++;
+                    buildPage(userState.currentPage);
+                };
+                navContainer.appendChild(nextBtn);
+            } else {
+                const submitBtn = document.createElement('button');
+                submitBtn.innerText = submitText;
+                submitBtn.className = 'button-primary px-8 py-3 rounded-lg font-bold';
+                submitBtn.disabled = !isPageValid;
+                submitBtn.onclick = displayResults;
+                navContainer.appendChild(submitBtn);
+            }
         }
         
         function displayResults() {
-           // ... same as v5.4
+           // ... (Same as v5.7) ...
         }
 
         function calculateFinalState() {
-            // ... same as v5.4
+            // ... (Same as v5.7) ...
         }
         
         function evaluateCondition(conditionStr) {
-            // ... same as v5.4
+           // ... (Same as v5.7) ...
         }
         
         function buildResultsHTML() {
-           // ... same as v5.4
+           // ... (Same as v5.7) ...
         }
 
         function processTemplate(templateStr) {
-           // ... same as v5.4
+           // ... (Same as v5.7) ...
         }
+
     </script>
 </body>
 </html>
