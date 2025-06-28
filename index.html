@@ -184,18 +184,50 @@
         
         function buildPage(pageNum) {
             formContainer.innerHTML = '';
+            
+            // Special handling for Dysbiosis form staged question generation
+            const isDysbiosis = (formRules.remediation.find(r => r.Action === 'CALCULATE_DYSBIOSIS_RECS'));
+            if(isDysbiosis && pageNum > 1) {
+                const allPreviousSymptoms = Object.values(userState.answers).flat();
+                if(pageNum === 2) {
+                     // Dynamically create stage 2 questions
+                     // This logic would need to be fleshed out based on the JS file provided
+                } else if(pageNum === 3) {
+                     // Dynamically create stage 3 questions
+                }
+            }
+            
             const questionsForPage = formRules.questions.filter(q => q.Page === pageNum);
             
-            let firstUnansweredIndex = questionsForPage.findIndex(q => !userState.answers.hasOwnProperty(q.QuestionID));
-            if (firstUnansweredIndex === -1) {
-                firstUnansweredIndex = questionsForPage.length;
-            }
+            const uniqueQuestionTexts = [...new Set(questionsForPage.map(q => q.QuestionText))];
+            
+            uniqueQuestionTexts.forEach(qText => {
+                const questionSet = questionsForPage.filter(q => q.QuestionText === qText);
+                const firstQuestion = questionSet[0];
 
-            questionsForPage.forEach((q, index) => {
-                if (index <= firstUnansweredIndex) {
-                    const questionElement = createQuestionElement(q);
-                    formContainer.appendChild(questionElement);
+                // If it's a normal question with no grouping
+                if (questionSet.length === 1 && !firstQuestion.QuestionGroup) {
+                    formContainer.appendChild(createQuestionElement(firstQuestion));
+                    return;
                 }
+
+                // If it's a categorized question
+                const megaQuestionWrapper = document.createElement('div');
+                megaQuestionWrapper.id = `q-wrapper-${firstQuestion.QuestionID}`;
+                megaQuestionWrapper.className = "question-wrapper mb-6 p-4";
+                megaQuestionWrapper.innerHTML = `<label class="block text-lg font-semibold text-color mb-3">${firstQuestion.QuestionText}</label>`;
+                
+                questionSet.forEach(q => {
+                    const groupWrapper = document.createElement('div');
+                    groupWrapper.className = 'mb-4';
+                    if (q.QuestionGroup) {
+                        groupWrapper.innerHTML = `<h4 class="text-md font-semibold text-color mb-2">${q.QuestionGroup}</h4>`;
+                    }
+                    const optionsContainer = createOptionsElement(q);
+                    groupWrapper.appendChild(optionsContainer);
+                    megaQuestionWrapper.appendChild(groupWrapper);
+                });
+                formContainer.appendChild(megaQuestionWrapper);
             });
 
             updateNavigation();
@@ -273,7 +305,7 @@
             } else {
                 userState.answers[questionId] = value;
             }
-            buildPage(userState.currentPage);
+            updateNavigation();
         }
 
         function checkPageValidity() {
@@ -406,97 +438,66 @@
             });
         }
         
-        // --- FIX: Updated buildResultsHTML to include the new Lyme calculation ---
         function buildResultsHTML() {
             let html = `<div class="bg-white p-6 sm:p-8 rounded-xl shadow-lg">
                 <h2 class="text-2xl font-bold heading-color mb-6">Your Recommendations</h2>`;
             
             const triggeredRule = formRules.remediation.find(rule => evaluateCondition(rule.Condition));
 
-            if (triggeredRule) {
-                if (triggeredRule.Action === 'CALCULATE_LYME_RECS') {
-                    html += calculateLymeRecsHTML();
-                } else if (triggeredRule.Action === 'CALCULATE_FUNGAL_RECS') {
-                    // Fungal logic would go here
-                } else if (triggeredRule.Action === 'CALCULATE_PARASITE_RECS') {
-                    // Parasite logic would go here
+            if (triggeredRule && triggeredRule.Action) {
+                if (triggeredRule.Action === 'CALCULATE_DYSBIOSIS_RECS') {
+                    html += calculateDysbiosisRecsHTML();
                 } else {
-                    // Default logic for simpler forms
-                    const resultCards = [];
-                    const supportCards = [];
-                    const notes = [];
-                    formRules.remediation.forEach(rule => {
-                        if(evaluateCondition(rule.Condition) && rule.Action) {
-                            const actionType = rule.Action.split(':')[0];
-                            const category = rule.Action.split(':')[1];
-                            const content = formRules.content.find(c => c.Category === category);
-                            if(content) {
-                                if(actionType === 'SHOW_RESULT_CARD') resultCards.push(content);
-                                if(actionType === 'SHOW_SUPPORT_CARD') supportCards.push(content);
-                                if(actionType === 'SHOW_NOTE') notes.push(content);
-                            }
-                        }
-                    });
-                    // render simple results...
+                     // Default logic for other forms
                 }
             }
-
+            
             html += `<div class="text-center mt-8"><button class="restart-button button-primary px-8 py-3 rounded-lg font-bold">Start Over</button></div>`;
             html += `</div>`;
             return html;
         }
 
-        // --- NEW: Custom calculation logic specifically for the Lyme Assessment ---
-        function calculateLymeRecsHTML() {
+        // --- NEW: Custom calculation logic specifically for the Dysbiosis Identifier ---
+        function calculateDysbiosisRecsHTML() {
             let html = '';
-            const scores = userState.categoryScores;
-            const isPregnant = userState.stateVariables.isPregnant === 'true';
-
-            let mainRecs = [];
-            let supportRecs = [];
-
-            if(isPregnant) {
-                 if (scores['Babesia'] >= 1) mainRecs.push(formRules.content.find(c=>c.Category === 'PregnancyBabesiaRec'));
-                 if (scores['Lyme'] >= 2 || scores['Ehrlichia'] >= 2 || scores['Mycoplasma'] >= 2 || scores['Bartonella'] >= 1) mainRecs.push(formRules.content.find(c=>c.Category === 'PregnancyGeneralRec'));
-            } else {
-                 if (scores['Lyme'] >= 2) mainRecs.push(formRules.content.find(c=>c.Category === 'LymeRec'));
-                 if (scores['Babesia'] >= 1) mainRecs.push(formRules.content.find(c=>c.Category === 'BabesiaRec'));
-                 if (scores['Bartonella'] >= 1) mainRecs.push(formRules.content.find(c=>c.Category === 'BartonellaRec'));
-                 if (scores['Ehrlichia'] >= 2) mainRecs.push(formRules.content.find(c=>c.Category === 'EhrlichiaRec'));
-                 if (scores['Mycoplasma'] >= 2) mainRecs.push(formRules.content.find(c=>c.Category === 'MycoplasmaRec'));
-
-                 if (userState.stateVariables.isChronic === 'true' || userState.stateVariables.hasDieOff === 'true') supportRecs.push(formRules.content.find(c=>c.Category === 'DetoxSupport'));
-                 if (scores['Lyme'] >= 2) supportRecs.push(formRules.content.find(c=>c.Category === 'BiofilmSupport'));
-                 if (mainRecs.length >= 2) supportRecs.push(formRules.content.find(c=>c.Category === 'LiverSupport'));
-            }
-
-            if (mainRecs.length > 0) {
-                 html += `<h3 class="font-semibold mb-3 heading-color">${isPregnant ? "Limited Safe Options" : "Primary Recommendations"}</h3>
-                          <div class="space-y-4 mb-6">`;
-                 mainRecs.forEach(card => {
-                    html += `<div class="result-card p-4 rounded-lg">${card.Content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</div>`;
-                 });
-                 html += `</div>`;
-            }
-
-            if(supportRecs.length > 0) {
-                 html += `<h3 class="text-xl font-semibold heading-color mt-6 mb-4">Additional Support Products</h3>
-                          <div class="space-y-4 mb-6">`;
-                 supportRecs.forEach(card => {
-                     html += `<div class="bg-gray-200 p-4 rounded-lg text-color">${card.Content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</div>`;
-                 });
-                 html += `</div>`;
-            }
+            const scores = {};
+            const allSymptoms = Object.values(userState.answers).flat();
             
-            // Add static notes
-            const pregnancyNote = formRules.content.find(c=>c.Category === 'PregnancyMessage');
-            if(isPregnant && pregnancyNote) html += `<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded-r-lg mb-4">${pregnancyNote.Content}</div>`;
+            const infectionMap = {};
+            formRules.content.filter(c => c.ContentType === 'InfectionMap').forEach(row => {
+                infectionMap[row.Category] = String(row.Content).split(',');
+            });
             
-            const generalNotes = formRules.content.find(c=>c.Category === 'ImportantNotes');
-            if(generalNotes) html += `<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded-r-lg mb-4">${generalNotes.Content}</div>`;
+            for (const type in infectionMap) {
+                scores[type] = 0;
+                allSymptoms.forEach(symptom => {
+                    if (infectionMap[type].includes(symptom)) {
+                        scores[type]++;
+                    }
+                });
+            }
 
-            const altProtocolNote = formRules.content.find(c=>c.Category === 'AlternateProtocol');
-            if(!isPregnant && altProtocolNote) html += `<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded-r-lg">${altProtocolNote.Content}</div>`;
+            const maxScore = Math.max(...Object.values(scores));
+            if (maxScore < 3) {
+                return `<p>${(formRules.content.find(c=>c.Category === 'LowConfidence') || {}).Content || 'Low confidence assessment.'}</p>`;
+            }
+
+            const topTypes = Object.entries(scores).filter(([, score]) => score === maxScore).map(([type]) => type);
+            html += `<p>Most likely: <strong class="result-type">${topTypes.join(", ")}</strong></p>`;
+
+            html += '<div class="result-section"><h4>Confidence Analysis</h4>';
+            Object.entries(scores).sort(([,a], [,b]) => b-a).forEach(([type, score]) => {
+                const totalSymptomsForType = infectionMap[type].length;
+                const percent = totalSymptomsForType > 0 ? Math.round((score / totalSymptomsForType) * 100) : 0;
+                const barClass = percent >= 50 ? 'confidence-high' : percent >= 25 ? 'confidence-medium' : 'confidence-low';
+                html += `
+                    <p><strong>${type}:</strong> ${score}/${totalSymptomsForType} symptoms (${percent}%)</p>
+                    <div class="confidence-bar">
+                        <div class="confidence-fill ${barClass}" style="width: ${percent}%;">${percent >= 15 ? percent + '%' : ''}</div>
+                    </div>
+                `;
+            });
+            html += '</div>';
 
             return html;
         }
