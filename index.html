@@ -181,8 +181,7 @@
                 }
             }
         }
-        
-        // --- NEW: Updated buildPage to handle categorized questions ---
+
         function buildPage(pageNum) {
             formContainer.innerHTML = '';
             const questionsForPage = formRules.questions.filter(q => q.Page === pageNum);
@@ -192,14 +191,12 @@
             uniqueQuestionTexts.forEach(qText => {
                 const questionSet = questionsForPage.filter(q => q.QuestionText === qText);
                 const firstQuestion = questionSet[0];
-                
-                // For a normal question, just create it
-                if (questionSet.length === 1) {
+
+                if (questionSet.length === 1 && !firstQuestion.QuestionGroup) {
                     formContainer.appendChild(createQuestionElement(firstQuestion));
                     return;
                 }
 
-                // For a categorized question, create a container and then the groups
                 const megaQuestionWrapper = document.createElement('div');
                 megaQuestionWrapper.id = `q-wrapper-${firstQuestion.QuestionID}`;
                 megaQuestionWrapper.className = "question-wrapper mb-6 p-4";
@@ -419,102 +416,75 @@
             });
         }
         
-        // --- NEW: Updated buildResultsHTML to handle dynamic filtering ---
         function buildResultsHTML() {
             let html = `<div class="bg-white p-6 sm:p-8 rounded-xl shadow-lg">
                 <h2 class="text-2xl font-bold heading-color mb-6">Your Recommendations</h2>`;
             
-            const resultCards = [];
-            const supportCards = [];
-            const notes = [];
-
-            formRules.remediation.forEach(rule => {
-                if (evaluateCondition(rule.Condition)) {
-                    if (rule.Action.startsWith('SHOW_RESULT_CARD')) {
-                        const category = rule.Action.split(':')[1];
-                        const cardData = formRules.content.find(c => c.Category === category);
-                        if (cardData) resultCards.push(cardData);
-                    } else if (rule.Action.startsWith('SHOW_NOTE')) {
-                        const category = rule.Action.split(':')[1];
-                        const noteData = formRules.content.find(c => c.Category === category);
-                        if (noteData) notes.push(noteData);
-                    }
-                }
-            });
-
-            if (resultCards.length > 0) {
-                 html += `<div class="space-y-4 mb-6">`;
-                 resultCards.forEach((card, index) => {
-                    const cardContent = parseAndFilterResultCard(card.Content);
-                    html += `<div class="result-card p-4 rounded-lg">
-                                ${cardContent.primary}
-                                ${cardContent.supporting}
-                                ${cardContent.protocol}
-                                ${cardContent.note}
-                             </div>`;
-                 });
-                 html += `</div>`;
+            let finalResultHTML = '';
+            
+            const triggeredRule = formRules.remediation.find(rule => evaluateCondition(rule.Condition));
+            
+            if(triggeredRule && triggeredRule.Action === 'CALCULATE_FUNGAL_RECS') {
+                finalResultHTML = calculateFungalRecsHTML();
+            } else {
+                 // --- Existing logic for simpler forms ---
             }
 
-            if (notes.length > 0) {
-                 html += `<div class="space-y-4">`;
-                 notes.forEach(note => {
-                     html += `<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded-r-lg">${note.Content}</div>`;
-                 });
-                 html += `</div>`;
-            }
-
+            html += finalResultHTML;
             html += `<div class="text-center mt-8"><button class="restart-button button-primary px-8 py-3 rounded-lg font-bold">Start Over</button></div>`;
             html += `</div>`;
             return html;
         }
 
-        // --- NEW: Helper function to parse result cards and apply filters ---
-        function parseAndFilterResultCard(contentString) {
-            const getPart = (key) => (contentString.match(new RegExp(`\\*\\*${key}:\\*\\* (.*?)(?=\\s\\*\\*|$)`)) || [])[1] || '';
+        // --- NEW: Custom calculation logic specifically for the Fungal Assessment ---
+        function calculateFungalRecsHTML(){
+            let html = '';
+            const scores = userState.categoryScores;
+
+            // Pregnancy check
+            if (userState.stateVariables.isPregnant === 'true') {
+                const card = formRules.content.find(c => c.Category === 'PregnancyRec_Fungal');
+                if (card) return `<div class="result-card p-4 rounded-lg">${card.Content}</div>`;
+                return '<p>Please consult a healthcare provider during pregnancy.</p>';
+            }
+
+            // Determine primary recommendations
+            let primaryStrong = (scores.resistant >= 2 || scores.severe >= 2) ? 'Melia Supreme' : 'Golden Thread Supreme';
+            let secondaryMild = 'Scutellaria Supreme'; // Default
+            if (scores.respiratory >= 2) secondaryMild = 'Usnea Supreme';
+            else if (scores.digestive >= 2) secondaryMild = 'Morinda Supreme';
             
-            let primaryProducts = getPart('Primary Products').split(',').map(p => p.trim());
-            const supportingProtocolKey = getPart('Supporting Protocol');
-            const note = getPart('Note');
-            const protocol = getPart('Protocol');
-            const medFilterRules = getPart('Medication Filter').split(';').map(r => r.trim()).filter(Boolean);
+            const recs = [primaryStrong, secondaryMild];
             
-            // Apply medication filter
-            const userMeds = userState.answers[10] || [];
-            medFilterRules.forEach(rule => {
-                const [med, productToRemove] = rule.split(':').map(s => s.trim());
-                if(userMeds.includes(med)) {
-                    primaryProducts = primaryProducts.filter(p => p !== productToRemove);
+            // Add other high priority recommendations
+            if (scores.oral >= 2) recs.push('Oral Supreme');
+            if (scores.urinary >= 2) recs.push('Uva Ursi Supreme');
+            if (scores.biofilm >= 2 || scores.chronic >= 2 || scores.resistant >= 2) recs.push('BFB-1 or BFB-2');
+            if (scores.severe >= 2 || scores.chronic >= 2) recs.push('Takesumi Supreme');
+
+            html += `<h3>Primary Protocol:</h3>`;
+            html += `<div class="space-y-4">`;
+            recs.forEach(recName => {
+                const product = formRules.content.find(c => c.Category === recName);
+                if (product) {
+                    html += `<div class="supplement-card priority-high">
+                                <div class="supplement-name">${product.Category}</div>
+                                <div class="supplement-description">${product.Content.match(/\*\*Description:\*\* (.*?)(?=\s\*\*|$)/)[1]}</div>
+                                <div class="dosage">Dosage: ${product.Content.match(/\*\*Dosage:\*\* (.*)/)[1]}</div>
+                            </div>`;
                 }
             });
+            html += `</div>`;
 
-            // Build HTML parts
-            let primaryHTML = '<div>';
-            if (primaryProducts.length > 0) {
-                primaryHTML += `<h4 class="font-bold mb-2">Primary Products:</h4><ul class="list-disc list-inside">`;
-                primaryProducts.forEach(productName => {
-                    const productInfo = formRules.content.find(c => c.ContentType === 'ProductInfo' && c.Category === productName);
-                    primaryHTML += `<li><strong>${productName}</strong>: ${(productInfo || {}).Content || ''}</li>`;
-                });
-                primaryHTML += '</ul>';
+            // Add dietary notes, etc.
+            const dietNote = formRules.content.find(c => c.Category === 'DietGuidelines');
+            if (dietNote) {
+                html += `<div class="mt-6 bg-yellow-100 p-4 rounded-lg">${dietNote.Content}</div>`;
             }
-            primaryHTML += '</div>';
 
-            let supportingHTML = '';
-            if (supportingProtocolKey) {
-                const supportingData = (formRules.content.find(c => c.Category === supportingProtocolKey) || {}).Content || '';
-                supportingHTML += `<div class="mt-4"><h4 class="font-bold mb-2">Supporting Protocol:</h4><ul class="list-disc list-inside">`;
-                supportingData.split(';').forEach(item => {
-                    supportingHTML += `<li>${item.trim()}</li>`;
-                });
-                supportingHTML += '</ul></div>';
-            }
-            
-            const noteHTML = note ? `<div class="mt-4 bg-yellow-200 text-yellow-800 p-2 rounded"><strong>Note:</strong> ${note}</div>` : '';
-            const protocolHTML = protocol ? `<div class="mt-4"><h4 class="font-bold mb-2">Protocol:</h4><p>${protocol}</p></div>` : '';
-            
-            return { primary: primaryHTML, supporting: supportingHTML, note: noteHTML, protocol: protocolHTML };
+            return html;
         }
+
     </script>
 </body>
 </html>
