@@ -184,35 +184,13 @@
         
         function buildPage(pageNum) {
             formContainer.innerHTML = '';
+            
+            // This logic can be expanded for more complex staged forms like Dysbiosis Identifier
+            
             const questionsForPage = formRules.questions.filter(q => q.Page === pageNum);
             
-            const uniqueQuestionTexts = [...new Set(questionsForPage.map(q => q.QuestionText))];
-            
-            uniqueQuestionTexts.forEach(qText => {
-                const questionSet = questionsForPage.filter(q => q.QuestionText === qText);
-                const firstQuestion = questionSet[0];
-
-                if (questionSet.length === 1 && !firstQuestion.QuestionGroup) {
-                    formContainer.appendChild(createQuestionElement(firstQuestion));
-                    return;
-                }
-
-                const megaQuestionWrapper = document.createElement('div');
-                megaQuestionWrapper.id = `q-wrapper-${firstQuestion.QuestionID}`;
-                megaQuestionWrapper.className = "question-wrapper mb-6 p-4";
-                megaQuestionWrapper.innerHTML = `<label class="block text-lg font-semibold text-color mb-3">${firstQuestion.QuestionText}</label>`;
-                
-                questionSet.forEach(q => {
-                    const groupWrapper = document.createElement('div');
-                    groupWrapper.className = 'mb-4';
-                    if (q.QuestionGroup) {
-                        groupWrapper.innerHTML = `<h4 class="text-md font-semibold text-color mb-2">${q.QuestionGroup}</h4>`;
-                    }
-                    const optionsContainer = createOptionsElement(q);
-                    groupWrapper.appendChild(optionsContainer);
-                    megaQuestionWrapper.appendChild(groupWrapper);
-                });
-                formContainer.appendChild(megaQuestionWrapper);
+            questionsForPage.forEach(q => {
+                 formContainer.appendChild(createQuestionElement(q));
             });
 
             updateNavigation();
@@ -372,7 +350,7 @@
                         const [action, ...params] = singleOutcome.trim().split(':');
                         const value = params.join(':');
                         
-                        if (action === 'SET_STATE_VARIABLE' || action === 'SET_PATH' || action === 'SET_ANSWER') {
+                        if (action === 'SET_STATE_VARIABLE') {
                             const [varName, ...varValueParts] = value.split(':');
                             userState.stateVariables[varName.trim()] = varValueParts.join(':').trim();
                         } else if (action === 'ADD_SCORE_TO_CATEGORY' || action === 'INCREMENT_CATEGORY_SCORE') {
@@ -423,19 +401,17 @@
             });
         }
         
-        // --- FIX: Updated to include Food Sensitivity logic ---
+        // --- FIX: Updated to include Bacterial logic ---
         function buildResultsHTML() {
             let html = `<div class="bg-white p-6 sm:p-8 rounded-xl shadow-lg">
                 <h2 class="text-2xl font-bold heading-color mb-6">Your Recommendations</h2>`;
             
             const triggeredRule = formRules.remediation.find(rule => evaluateCondition(rule.Condition));
 
-            if (triggeredRule && triggeredRule.Action) {
-                if (triggeredRule.Action === 'CALCULATE_FOOD_SENSITIVITY_RECS') {
-                    html += calculateFoodSensitivityRecsHTML();
-                } else {
-                    // Logic for other forms...
-                }
+            if (triggeredRule && triggeredRule.Action === 'CALCULATE_BACTERIAL_RECS') {
+                html += calculateBacterialRecsHTML();
+            } else if (triggeredRule) {
+                // Handle other form types here...
             }
             
             html += `<div class="text-center mt-8"><button class="restart-button button-primary px-8 py-3 rounded-lg font-bold">Start Over</button></div>`;
@@ -443,57 +419,55 @@
             return html;
         }
         
-        // --- NEW: Custom calculation logic specifically for the Food Sensitivity Assessment ---
-        function calculateFoodSensitivityRecsHTML() {
-            let html = '';
-            const scores = userState.categoryScores;
-            const sortedScores = Object.entries(scores).sort((a,b) => b[1] - a[1]);
-
-            const highRisk = sortedScores.filter(([, score]) => score >= 4);
-            const mediumRisk = sortedScores.filter(([, score]) => score >= 2 && score < 4);
-            const lowRisk = sortedScores.filter(([, score]) => score > 0 && score < 2);
-            
-            const renderTier = (title, foodGroups, color) => {
-                if (foodGroups.length === 0) return '';
-                let tierHTML = `<div class="mb-6 p-4 rounded border-2" style="border-color:${color};">
-                                <h3 class="text-lg font-medium mb-3" style="color:${color};">${title}</h3>`;
-                tierHTML += `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">`;
-                foodGroups.forEach(([foodGroup, score]) => {
-                    const examples = (formRules.content.find(c => c.Category === foodGroup) || {}).Content || 'No examples found.';
-                    tierHTML += `<div class="p-3 rounded border" style="border-color:${color};">
-                                    <div class="font-medium mb-2 text-color">${foodGroup} (Score: ${score})</div>
-                                    <div class="text-sm text-color">${examples.replace(/\*\*Examples:\*\* /g, '<strong>Avoid:</strong> ')}</div>
-                                 </div>`;
-                });
-                tierHTML += `</div></div>`;
-                return tierHTML;
-            };
-
-            html += renderTier('🔴 High Priority - Eliminate First (Weeks 1-3)', highRisk, '#a15236');
-            html += renderTier('🟡 Medium Priority - Test After High Priority (Weeks 4-6)', mediumRisk, '#767034');
-            html += renderTier('🟢 Lower Priority - Monitor', lowRisk, '#879683');
-            
-            // Add notes
-            const elimProtocol = formRules.content.find(c=>c.Category === 'EliminationProtocol');
-            if(elimProtocol) {
-                html += `<div class="p-4 rounded border my-6" style="background-color: #879683; border-color: #404e2c;">
-                            <h3 class="font-medium mb-2" style="color: #fed695;">📋 Your Elimination Diet Protocol:</h3>
-                            <ol class="list-decimal pl-5 space-y-2 text-sm" style="color: #fed695;">
-                                ${elimProtocol.Content.split(';').map(item => `<li>${item}</li>`).join('')}
-                            </ol>
-                         </div>`;
-            }
-            const importantNotes = formRules.content.find(c=>c.Category === 'ImportantNotes');
-            if(importantNotes) {
-                html += `<div class="p-4 rounded border" style="background: linear-gradient(135deg, #767034 0%, #483621 100%); border-color: #404e2c;">
-                            <h3 class="font-medium mb-2" style="color: #fed695;">⚠️ Important Notes:</h3>
-                            <ul class="list-disc pl-5 space-y-1 text-sm" style="color: #fed695;">
-                                ${importantNotes.Content.split(';').map(item => `<li>${item}</li>`).join('')}
-                            </ul>
-                         </div>`;
+        // --- NEW: Custom calculation logic specifically for the Bacterial Assessment ---
+        function calculateBacterialRecsHTML() {
+            if (userState.stateVariables.isPregnant === 'true') {
+                const pregRec = formRules.content.find(c => c.Category === 'PregnancyRec');
+                return `<div class="result-card p-4 rounded-lg">${pregRec ? pregRec.Content : ''}</div>`;
             }
 
-            return html;
+            const primary = userState.stateVariables.primaryAntimicrobial;
+            const alternative = primary === 'Golden Thread Supreme' ? 'Melia Supreme' : 'Golden Thread Supreme';
+            
+            const selectedSymptoms = userState.answers[2] || [];
+            const secondaryRecsMap = new Map();
+            formRules.content.filter(c => c.ContentType === 'SecondaryRecMap').forEach(rec => {
+                secondaryRecsMap.set(rec.Category, String(rec.Content).split(','));
+            });
+
+            const allSecondaries = [];
+            selectedSymptoms.forEach(symptom => {
+                if(secondaryRecsMap.has(symptom)) {
+                    allSecondaries.push(...secondaryRecsMap.get(symptom));
+                }
+            });
+
+            const counts = {};
+            allSecondaries.forEach(herb => {
+                counts[herb] = (counts[herb] || 0) + 1;
+            });
+            const secondaryOptions = Object.keys(counts).sort((a,b) => counts[b] - counts[a]).slice(0, 5);
+
+            let dietaryAdvice = '';
+            if (userState.answers[1] === 'Yes') { // Upper belly pain
+                 dietaryAdvice += (formRules.content.find(c => c.Category === 'H_Pylori_Advice') || {}).Content || '';
+            }
+            if (userState.answers[3] === 'Yes') { // SIBO
+                 dietaryAdvice += ` ${(formRules.content.find(c => c.Category === 'SIBO_Advice') || {}).Content || ''}`;
+            }
+
+            let html = `<h3>Primary Antimicrobial Recommendation</h3>
+                        <p><strong>${primary}</strong></p>
+                        <p><em>If you've already tried ${primary}, try <strong>${alternative}</strong> instead.</em></p>
+                        <h3>Secondary Antimicrobials to Take With Primary</h3>
+                        <p>Choose 1 of these. They are listed in order of importance based on your symptoms:</p>
+                        <ul>${secondaryOptions.map(opt => `<li>${opt}</li>`).join('')}</ul>`;
+            
+            if(dietaryAdvice) {
+                html += `<h3>Additional Lifestyle Recommendations</h3><p>${dietaryAdvice}</p>`;
+            }
+
+            return `<div class="result-card p-4 rounded-lg">${html}</div>`;
         }
 
     </script>
