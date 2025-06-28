@@ -186,33 +186,16 @@
             formContainer.innerHTML = '';
             const questionsForPage = formRules.questions.filter(q => q.Page === pageNum);
             
-            const uniqueQuestionTexts = [...new Set(questionsForPage.map(q => q.QuestionText))];
-            
-            uniqueQuestionTexts.forEach(qText => {
-                const questionSet = questionsForPage.filter(q => q.QuestionText === qText);
-                const firstQuestion = questionSet[0];
+            let firstUnansweredIndex = questionsForPage.findIndex(q => !userState.answers.hasOwnProperty(q.QuestionID));
+            if (firstUnansweredIndex === -1) {
+                firstUnansweredIndex = questionsForPage.length;
+            }
 
-                if (questionSet.length === 1 && !firstQuestion.QuestionGroup) {
-                    formContainer.appendChild(createQuestionElement(firstQuestion));
-                    return;
+            questionsForPage.forEach((q, index) => {
+                if (index <= firstUnansweredIndex) {
+                    const questionElement = createQuestionElement(q);
+                    formContainer.appendChild(questionElement);
                 }
-
-                const megaQuestionWrapper = document.createElement('div');
-                megaQuestionWrapper.id = `q-wrapper-${firstQuestion.QuestionID}`;
-                megaQuestionWrapper.className = "question-wrapper mb-6 p-4";
-                megaQuestionWrapper.innerHTML = `<label class="block text-lg font-semibold text-color mb-3">${firstQuestion.QuestionText}</label>`;
-                
-                questionSet.forEach(q => {
-                    const groupWrapper = document.createElement('div');
-                    groupWrapper.className = 'mb-4';
-                    if (q.QuestionGroup) {
-                        groupWrapper.innerHTML = `<h4 class="text-md font-semibold text-color mb-2">${q.QuestionGroup}</h4>`;
-                    }
-                    const optionsContainer = createOptionsElement(q);
-                    groupWrapper.appendChild(optionsContainer);
-                    megaQuestionWrapper.appendChild(groupWrapper);
-                });
-                formContainer.appendChild(megaQuestionWrapper);
             });
 
             updateNavigation();
@@ -290,7 +273,7 @@
             } else {
                 userState.answers[questionId] = value;
             }
-            updateNavigation();
+            buildPage(userState.currentPage);
         }
 
         function checkPageValidity() {
@@ -423,25 +406,25 @@
             });
         }
         
-        // --- NEW: Updated buildResultsHTML to handle special calculation actions ---
+        // --- FIX: Updated buildResultsHTML to include the new Lyme calculation ---
         function buildResultsHTML() {
             let html = `<div class="bg-white p-6 sm:p-8 rounded-xl shadow-lg">
                 <h2 class="text-2xl font-bold heading-color mb-6">Your Recommendations</h2>`;
             
-            const resultCards = [];
-            const supportCards = [];
-            const notes = [];
-            let specialResultsHTML = '';
-
             const triggeredRule = formRules.remediation.find(rule => evaluateCondition(rule.Condition));
 
             if (triggeredRule) {
-                if (triggeredRule.Action === 'CALCULATE_FUNGAL_RECS') {
-                    specialResultsHTML = calculateFungalRecsHTML();
+                if (triggeredRule.Action === 'CALCULATE_LYME_RECS') {
+                    html += calculateLymeRecsHTML();
+                } else if (triggeredRule.Action === 'CALCULATE_FUNGAL_RECS') {
+                    // Fungal logic would go here
                 } else if (triggeredRule.Action === 'CALCULATE_PARASITE_RECS') {
-                    specialResultsHTML = calculateParasiteRecsHTML();
+                    // Parasite logic would go here
                 } else {
-                    // Default behavior for SHOW_... actions
+                    // Default logic for simpler forms
+                    const resultCards = [];
+                    const supportCards = [];
+                    const notes = [];
                     formRules.remediation.forEach(rule => {
                         if(evaluateCondition(rule.Condition) && rule.Action) {
                             const actionType = rule.Action.split(':')[0];
@@ -454,34 +437,8 @@
                             }
                         }
                     });
+                    // render simple results...
                 }
-            }
-            
-            html += specialResultsHTML;
-
-            if (resultCards.length > 0) {
-                 html += `<div class="space-y-4 mb-6">`;
-                 resultCards.forEach((card, index) => {
-                     html += `<div class="result-card p-4 rounded-lg ${index === 0 ? 'result-card-top' : ''}">${card.Content.replace(/\*\*(.*?)\*\*/g, '<br><strong>$1</strong>')}</div>`;
-                 });
-                 html += `</div>`;
-            }
-
-            if (supportCards.length > 0) {
-                 html += `<h3 class="text-xl font-semibold heading-color mt-6 mb-4">Additional Support</h3>
-                          <div class="space-y-4 mb-6">`;
-                 supportCards.forEach(card => {
-                     html += `<div class="bg-gray-200 p-4 rounded-lg text-color">${card.Content.replace(/\*\*(.*?)\*\*/g, '<br><strong>$1</strong>')}</div>`;
-                 });
-                 html += `</div>`;
-            }
-
-             if (notes.length > 0) {
-                 html += `<div class="space-y-4">`;
-                 notes.forEach(note => {
-                     html += `<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded-r-lg">${note.Content}</div>`;
-                 });
-                 html += `</div>`;
             }
 
             html += `<div class="text-center mt-8"><button class="restart-button button-primary px-8 py-3 rounded-lg font-bold">Start Over</button></div>`;
@@ -489,10 +446,61 @@
             return html;
         }
 
-        function calculateFungalRecsHTML() { /* ... Fungal logic ... */ return ''; }
-        
-        function calculateParasiteRecsHTML() { /* ... Parasite logic ... */ return ''; }
-        
+        // --- NEW: Custom calculation logic specifically for the Lyme Assessment ---
+        function calculateLymeRecsHTML() {
+            let html = '';
+            const scores = userState.categoryScores;
+            const isPregnant = userState.stateVariables.isPregnant === 'true';
+
+            let mainRecs = [];
+            let supportRecs = [];
+
+            if(isPregnant) {
+                 if (scores['Babesia'] >= 1) mainRecs.push(formRules.content.find(c=>c.Category === 'PregnancyBabesiaRec'));
+                 if (scores['Lyme'] >= 2 || scores['Ehrlichia'] >= 2 || scores['Mycoplasma'] >= 2 || scores['Bartonella'] >= 1) mainRecs.push(formRules.content.find(c=>c.Category === 'PregnancyGeneralRec'));
+            } else {
+                 if (scores['Lyme'] >= 2) mainRecs.push(formRules.content.find(c=>c.Category === 'LymeRec'));
+                 if (scores['Babesia'] >= 1) mainRecs.push(formRules.content.find(c=>c.Category === 'BabesiaRec'));
+                 if (scores['Bartonella'] >= 1) mainRecs.push(formRules.content.find(c=>c.Category === 'BartonellaRec'));
+                 if (scores['Ehrlichia'] >= 2) mainRecs.push(formRules.content.find(c=>c.Category === 'EhrlichiaRec'));
+                 if (scores['Mycoplasma'] >= 2) mainRecs.push(formRules.content.find(c=>c.Category === 'MycoplasmaRec'));
+
+                 if (userState.stateVariables.isChronic === 'true' || userState.stateVariables.hasDieOff === 'true') supportRecs.push(formRules.content.find(c=>c.Category === 'DetoxSupport'));
+                 if (scores['Lyme'] >= 2) supportRecs.push(formRules.content.find(c=>c.Category === 'BiofilmSupport'));
+                 if (mainRecs.length >= 2) supportRecs.push(formRules.content.find(c=>c.Category === 'LiverSupport'));
+            }
+
+            if (mainRecs.length > 0) {
+                 html += `<h3 class="font-semibold mb-3 heading-color">${isPregnant ? "Limited Safe Options" : "Primary Recommendations"}</h3>
+                          <div class="space-y-4 mb-6">`;
+                 mainRecs.forEach(card => {
+                    html += `<div class="result-card p-4 rounded-lg">${card.Content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</div>`;
+                 });
+                 html += `</div>`;
+            }
+
+            if(supportRecs.length > 0) {
+                 html += `<h3 class="text-xl font-semibold heading-color mt-6 mb-4">Additional Support Products</h3>
+                          <div class="space-y-4 mb-6">`;
+                 supportRecs.forEach(card => {
+                     html += `<div class="bg-gray-200 p-4 rounded-lg text-color">${card.Content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</div>`;
+                 });
+                 html += `</div>`;
+            }
+            
+            // Add static notes
+            const pregnancyNote = formRules.content.find(c=>c.Category === 'PregnancyMessage');
+            if(isPregnant && pregnancyNote) html += `<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded-r-lg mb-4">${pregnancyNote.Content}</div>`;
+            
+            const generalNotes = formRules.content.find(c=>c.Category === 'ImportantNotes');
+            if(generalNotes) html += `<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded-r-lg mb-4">${generalNotes.Content}</div>`;
+
+            const altProtocolNote = formRules.content.find(c=>c.Category === 'AlternateProtocol');
+            if(!isPregnant && altProtocolNote) html += `<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded-r-lg">${altProtocolNote.Content}</div>`;
+
+            return html;
+        }
+
     </script>
 </body>
 </html>
