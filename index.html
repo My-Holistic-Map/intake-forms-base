@@ -35,7 +35,6 @@
         </header>
         
         <main id="mainContent">
-            <!-- This container will hold the current view -->
         </main>
 
         <div id="navigationContainer" class="mt-8 flex justify-between items-center"></div>
@@ -173,12 +172,7 @@
         function buildPage(pageNum) {
             let pageHTML = '';
             const questionsForPage = formRules.questions.filter(q => {
-                if (q.Page !== pageNum) {
-                    return false;
-                }
-                if (!q.ShowHideLogic || String(q.ShowHideLogic) === '') {
-                    return true;
-                }
+                if (q.Page !== pageNum) return false;
                 return evaluateCondition(q.ShowHideLogic, 'show-hide');
             });
             
@@ -346,7 +340,7 @@
         
         function evaluateCondition(conditionStr, context = 'remediation') {
             if (typeof conditionStr !== 'string' || !conditionStr.trim()) {
-                return context === 'show-hide' ? true : context === 'remediation';
+                return true; 
             }
             if (conditionStr.toUpperCase() === 'ALWAYS_TRUE') return true;
             
