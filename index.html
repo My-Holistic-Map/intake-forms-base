@@ -173,11 +173,13 @@
         function buildPage(pageNum) {
             let pageHTML = '';
             const questionsForPage = formRules.questions.filter(q => {
-                // <--- DO NOT ALTER THESE LINES
-                if (!q.ShowHideLogic) return q.Page === pageNum;
-                q.Page === pageNum && evaluateCondition(q.ShowHideLogic, 'show-hide');
-                return q; 
-                // ---->
+                if (q.Page !== pageNum) {
+                    return false;
+                }
+                if (!q.ShowHideLogic || String(q.ShowHideLogic) === '') {
+                    return true;
+                }
+                return evaluateCondition(q.ShowHideLogic, 'show-hide');
             });
             
             questionsForPage.forEach(q => {
@@ -188,6 +190,7 @@
         }
 
         function escapeString(str) {
+            if (typeof str !== 'string') return '';
             return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
         }
 
@@ -312,7 +315,6 @@
             userState.scores = {};
             formRules.questions.forEach(q => {
                 const answer = userState.answers[q.QuestionID];
-                console.log(`answer: ${answer}`);
                 if (!answer) return;
                 
                 if (q.LinkedOutcome && typeof q.LinkedOutcome === 'string') {
@@ -324,7 +326,6 @@
                         try {
                             const scoresToAdd = JSON.parse(outcomeStr);
                             for (const [category, score] of Object.entries(scoresToAdd)) {
-                                console.log(`category: ${category}`);
                                 userState.scores[category] = (userState.scores[category] || 0) + parseInt(score);
                             }
                         } catch(e) { /* Not a JSON score */ }
@@ -345,7 +346,7 @@
         
         function evaluateCondition(conditionStr, context = 'remediation') {
             if (typeof conditionStr !== 'string' || !conditionStr.trim()) {
-                return context === 'remediation'; 
+                return context === 'show-hide' ? true : context === 'remediation';
             }
             if (conditionStr.toUpperCase() === 'ALWAYS_TRUE') return true;
             
@@ -382,13 +383,18 @@
             } else {
                 triggeredRules.forEach(rule => {
                     const content = formRules.content.find(c => c.ContentID === rule.ContentID);
-                    if(content) {
+                    if(content && rule.ResultType === 'TieredList') {
                          html += `<div class="result-card" style="border-color:${rule.Color || '#a15236'}">
                                     <h3>${rule.Title}</h3>
                                     <p>${rule.Description}</p>
                                     <div class="mt-4">
                                         ${buildTierContent(content.Category, sortedScores, rule)}
                                     </div>
+                                  </div>`;
+                    } else if (content && rule.ResultType === 'SimpleNote') {
+                        html += `<div class="result-card" style="border-color:${rule.Color || '#a15236'}">
+                                    <h3>${rule.Title}</h3>
+                                    <div>${parseMarkdown(content.Content)}</div>
                                   </div>`;
                     }
                 });
@@ -398,17 +404,14 @@
         }
 
         function buildTierContent(category, sortedScores, rule) {
-            console.log(`buildTierContent: ${category} ${sortedScores} ${rule}`);
-            // 
-            let tierHTML = '';
+             let tierHTML = '';
             const scoresInTier = sortedScores.filter(([,score]) => {
-                console.log(`score: ${score}`);
-                const condition = rule.Condition.split(';').find(c => c.startsWith('SCORE:'));
+                const condition = rule.Condition.split(';').find(c => c.startsWith('SCORE'));
                 if(!condition) return false;
+                
                 const match = condition.match(/(>=|<=|>|<|=) (.+)/);
                 if(!match) return false;
                 try {
-                    console.log(`${score} ${match[0]}`);
                     return eval(`${score} ${match[0]}`);
                 } catch(e) { return false; }
             });
