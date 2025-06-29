@@ -21,11 +21,8 @@
         .button-primary:disabled { opacity: 0.5; cursor: not-allowed; }
         .button-secondary { background-color: #879683; color: #fed695; transition: background-color 0.2s; }
         .button-secondary:hover { background-color: #767034; }
-        .question-group { border: 2px solid #879683; }
-        .question-group legend { color: #a15236; }
-        .result-card { background: linear-gradient(135deg, #767034 0%, #483621 100%); color: #fed695; }
-        .result-card-top { border: 2px solid #a15236; }
-        .question-wrapper { transition: all 0.3s ease-in-out; }
+        .result-card { border: 2px solid; margin-bottom: 1rem; padding: 1rem; border-radius: 0.5rem; }
+        .result-card h3 { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem; }
     </style>
 </head>
 <body class="text-gray-800">
@@ -37,27 +34,11 @@
             <nav id="primaryNav" class="mt-4 flex justify-center items-center flex-wrap gap-x-6 gap-y-2 text-yellow-200"></nav>
         </header>
         
-        <div id="breadcrumbContainer" class="mb-4 text-sm text-white px-2"></div>
-
         <main id="mainContent">
-            <!-- Container for the initial loading message -->
-            <div id="loadingContainer" class="text-center p-8 hidden-element">
-                <p class="text-center text-lg text-white">Loading assessment...</p>
-            </div>
-            
-            <!-- Container for the file uploader (testing mode) -->
-            <div id="uploaderContainer" class="form-container p-6 sm:p-8 rounded-xl shadow-2xl text-center hidden-element">
-                <h2 class="text-2xl font-bold heading-color">Test an Assessment</h2>
-                <p class="text-lg text-color mt-2">Upload a spreadsheet to begin.</p>
-                <input type="file" id="fileUploader" class="mt-4 mx-auto block w-full max-w-xs text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
-            </div>
-
-            <!-- Container for the form itself -->
-            <div id="formContainer" class="form-container p-6 sm:p-8 rounded-xl shadow-2xl hidden-element"></div>
+            <!-- This container will hold the current view -->
         </main>
 
         <div id="navigationContainer" class="mt-8 flex justify-between items-center"></div>
-        <div id="resultsContainer" class="hidden-element mt-8"></div>
 
         <footer id="pageFooter" class="mt-12 pt-8 border-t border-gray-400 border-opacity-50 text-white"></footer>
     </div>
@@ -69,14 +50,41 @@
         let lastLoadedData = null;
 
         const mainContent = document.getElementById('mainContent');
-        const loadingContainer = document.getElementById('loadingContainer');
-        const uploaderContainer = document.getElementById('uploaderContainer');
-        const formContainer = document.getElementById('formContainer');
         const navContainer = document.getElementById('navigationContainer');
-        const resultsContainer = document.getElementById('resultsContainer');
-        const fileUploader = document.getElementById('fileUploader');
         
-        fileUploader.addEventListener('change', handleFileUpload);
+        function showView(viewType, content = '') {
+            navContainer.innerHTML = '';
+            mainContent.innerHTML = ''; 
+
+            let container;
+            if (viewType === 'uploader') {
+                container = document.createElement('div');
+                container.className = 'form-container p-6 sm:p-8 rounded-xl shadow-2xl text-center';
+                container.innerHTML = `
+                    <h2 class="text-2xl font-bold heading-color">Test an Assessment</h2>
+                    <p class="text-lg text-color mt-2">Upload a spreadsheet to begin.</p>
+                    <input type="file" id="fileUploader" class="mt-4 mx-auto block w-full max-w-xs text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                `;
+                mainContent.appendChild(container);
+                document.getElementById('fileUploader').addEventListener('change', handleFileUpload);
+            } else if (viewType === 'loading') {
+                mainContent.innerHTML = `<p class="text-center text-lg text-white">Loading assessment...</p>`;
+            } else if (viewType === 'form') {
+                 container = document.createElement('div');
+                 container.id = 'formContainer';
+                 container.className = 'form-container p-6 sm:p-8 rounded-xl shadow-2xl';
+                 container.innerHTML = content;
+                 mainContent.appendChild(container);
+                 navContainer.classList.remove('hidden-element');
+            } else if (viewType === 'results') {
+                container = document.createElement('div');
+                container.id = 'resultsContainer';
+                container.className = 'form-container p-6 sm:p-8 rounded-xl shadow-2xl';
+                container.innerHTML = content;
+                mainContent.appendChild(container);
+                 navContainer.classList.remove('hidden-element');
+            }
+        }
         
         document.addEventListener('DOMContentLoaded', () => {
             const params = new URLSearchParams(window.location.search);
@@ -85,15 +93,13 @@
                 const filePath = `./forms/sheets/${formName}.xlsx`; 
                 loadFormFromUrl(filePath);
             } else {
-                uploaderContainer.classList.remove('hidden-element');
+                showView('uploader');
             }
         });
 
         async function loadFormFromUrl(url) {
             try {
-                uploaderContainer.classList.add('hidden-element');
-                loadingContainer.classList.remove('hidden-element');
-
+                showView('loading');
                 const response = await fetch(url);
                 if (!response.ok) throw new Error(`Form not found. Server responded with status: ${response.status}`);
                 const data = await response.arrayBuffer();
@@ -101,13 +107,14 @@
                 processSpreadsheet(data);
             } catch (error) {
                 console.error("Error loading form from URL:", error);
-                mainContent.innerHTML = `<p class="text-center text-red-300 text-lg">Error: The requested assessment could not be loaded.</p>`;
+                 mainContent.innerHTML = `<div class="form-container p-6 sm:p-8 rounded-xl shadow-2xl text-center"><p class="text-red-500 text-lg">Error: The requested assessment could not be loaded.</p></div>`;
             }
         }
         
         function handleFileUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
+            showView('loading');
             const reader = new FileReader();
             reader.onload = (e) => {
                 lastLoadedData = e.target.result;
@@ -116,7 +123,6 @@
             reader.readAsArrayBuffer(file);
         }
 
-        // --- FIX: Reworked UI state management for reliability ---
         function processSpreadsheet(data) {
             try {
                 const workbook = XLSX.read(data, { type: 'array' });
@@ -127,83 +133,309 @@
                     remediation: XLSX.utils.sheet_to_json(workbook.Sheets['RemediationRules']),
                     content: XLSX.utils.sheet_to_json(workbook.Sheets['ResultContent'])
                 };
-
-                // Hide loading/uploading and show the form container
-                loadingContainer.classList.add('hidden-element');
-                uploaderContainer.classList.add('hidden-element');
-                formContainer.classList.remove('hidden-element');
-                
                 resetState();
                 populateEnvironment();
                 buildPage(userState.currentPage);
-
             } catch (error) {
                 console.error("Error processing spreadsheet:", error);
-                mainContent.innerHTML = `<p class="text-center text-red-300 text-lg">Error: Could not read the spreadsheet.</p>`;
+                 mainContent.innerHTML = `<div class="form-container p-6 sm:p-8 rounded-xl shadow-2xl text-center"><p class="text-red-500 text-lg">Error: Could not read the spreadsheet.</p></div>`;
             }
         }
         
-        // ... The rest of the functions (resetState, populateEnvironment, buildPage, etc.) remain the same ...
-        // They will now correctly manipulate the #formContainer which is guaranteed to exist.
-        
         function resetState() {
-            userState = {
-                currentPage: 1,
-                answers: {},
-                categoryScores: {},
-                stateVariables: {}
-            };
-            resultsContainer.classList.add('hidden-element');
-            formContainer.classList.remove('hidden-element');
-            navContainer.classList.remove('hidden-element');
+             userState = { currentPage: 1, answers: {}, scores: {}, stateVariables: {} };
         }
 
         function populateEnvironment() {
-            // ... (Same as v5.7) ...
+            const getVar = (key, fallback = '') => (formRules.environment.find(v => v.Key === key) || {}).Value || fallback;
+            document.getElementById('assessmentTitle').innerText = getVar('Assessment Title', 'Assessment');
+            document.getElementById('assessmentIntro').innerText = getVar('Intro');
+            const primaryNavContainer = document.getElementById('primaryNav');
+            primaryNavContainer.innerHTML = '';
+            getVar('Primary Nav', '').split(';').forEach(link => {
+                const [text, url] = link.split(',').map(s => s.trim());
+                let navItem;
+                if (text === 'Restart') {
+                    navItem = document.createElement('button');
+                    navItem.className = "hover:underline";
+                    navItem.onclick = () => { if (lastLoadedData) processSpreadsheet(lastLoadedData); };
+                } else {
+                    navItem = document.createElement('a');
+                    navItem.href = url;
+                    navItem.target = "_blank";
+                    navItem.className = "hover:underline";
+                }
+                navItem.innerText = text;
+                primaryNavContainer.appendChild(navItem);
+            });
         }
         
         function buildPage(pageNum) {
-            // ... (Same as v5.7) ...
+            let pageHTML = '';
+            const questionsForPage = formRules.questions.filter(q => {
+                // <--- DO NOT ALTER THESE LINES
+                if (!q.ShowHideLogic) return q.Page === pageNum;
+                q.Page === pageNum && evaluateCondition(q.ShowHideLogic, 'show-hide');
+                return q; 
+                // ---->
+            });
+            
+            questionsForPage.forEach(q => {
+                pageHTML += createQuestionHTML(q);
+            });
+            showView('form', pageHTML);
+            updateNavigation();
         }
 
-        function createQuestionElement(q) {
-            // ... (Same as v5.7) ...
+        function escapeString(str) {
+            return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        }
+
+        function createQuestionHTML(q) {
+            let wrapper = `<div id="q-wrapper-${q.QuestionID}" class="question-wrapper mb-6 p-4">
+                           <label class="block text-lg font-semibold text-color mb-3">${q.QuestionText}</label>`;
+            wrapper += createOptionsHTML(q);
+            wrapper += `</div>`;
+            return wrapper;
         }
         
-        function createOptionsElement(q) {
-            // ... (Same as v5.7) ...
+        function createOptionsHTML(q) {
+            let optionsHTML = '';
+            const options = q.AnswerOptions ? String(q.AnswerOptions).split(',') : [];
+            const currentAnswer = userState.answers[q.QuestionID];
+            
+            const layoutClass = options.length > 8 ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2' : 'space-y-2';
+            optionsHTML += `<div class="${layoutClass}">`;
+
+            if ((q.QuestionType === 'multiple-choice' || q.QuestionType === 'multiple-selection') && options.length > 0) {
+                 options.forEach(opt => {
+                    const cleanOpt = opt.trim();
+                    const escapedOpt = escapeString(cleanOpt);
+                    const isChecked = q.QuestionType === 'multiple-choice' 
+                        ? currentAnswer === cleanOpt 
+                        : Array.isArray(currentAnswer) && currentAnswer.includes(cleanOpt);
+                    
+                    const inputType = q.QuestionType === 'multiple-choice' ? 'radio' : 'checkbox';
+                    
+                    optionsHTML += `
+                        <label class="flex items-start p-3 rounded-lg hover:bg-yellow-200 cursor-pointer">
+                            <input type="${inputType}" name="question-${q.QuestionID}" value="${escapedOpt}" class="h-5 w-5 mt-1 text-green-800 focus:ring-green-700 border-gray-500 rounded" ${isChecked ? 'checked' : ''} onchange="handleAnswerChange(${q.QuestionID}, '${escapedOpt}', this.checked)">
+                            <span class="ml-3 text-color">${cleanOpt}</span>
+                        </label>`;
+                });
+            }
+            optionsHTML += `</div>`;
+            return optionsHTML;
         }
         
         function handleAnswerChange(questionId, value, isChecked) {
-            // ... (Same as v5.7) ...
+            const question = formRules.questions.find(q => q.QuestionID === questionId);
+            if (!question) return;
+
+            if (question.QuestionType === 'multiple-selection') {
+                if (!userState.answers[questionId]) userState.answers[questionId] = [];
+                let currentAnswers = userState.answers[questionId];
+                if (isChecked) {
+                    if (!currentAnswers.includes(value)) currentAnswers.push(value);
+                } else {
+                    userState.answers[questionId] = currentAnswers.filter(ans => ans !== value);
+                }
+            } else {
+                userState.answers[questionId] = value;
+            }
+            updateNavigation();
         }
 
         function checkPageValidity() {
-            // ... (Same as v5.7) ...
+            const questionsOnPage = formRules.questions.filter(q => q.Page === userState.currentPage);
+            return questionsOnPage.every(q => {
+                if (q.IsRequired) {
+                    const answer = userState.answers[q.QuestionID];
+                    return answer && (!Array.isArray(answer) || answer.length > 0);
+                }
+                return true;
+            });
         }
-        
+
         function updateNavigation() {
-            // ... (Same as v5.7) ...
+            navContainer.innerHTML = '';
+            const maxPage = Math.max(...formRules.pages.map(p => p.PageNumber), 1);
+            const isPageValid = checkPageValidity();
+
+            if (userState.currentPage > 1) {
+                const backBtn = document.createElement('button');
+                backBtn.innerText = 'Back';
+                backBtn.className = 'button-secondary px-8 py-3 rounded-lg font-bold';
+                backBtn.onclick = () => {
+                    userState.currentPage--;
+                    buildPage(userState.currentPage);
+                };
+                navContainer.appendChild(backBtn);
+            } else {
+                 navContainer.appendChild(document.createElement('div'));
+            }
+
+            if (userState.currentPage < maxPage) {
+                const nextBtn = document.createElement('button');
+                nextBtn.innerText = 'Next';
+                nextBtn.className = 'button-primary px-8 py-3 rounded-lg font-bold';
+                nextBtn.disabled = !isPageValid;
+                nextBtn.onclick = () => {
+                    userState.currentPage++;
+                    buildPage(userState.currentPage);
+                };
+                navContainer.appendChild(nextBtn);
+            } else {
+                const submitBtn = document.createElement('button');
+                submitBtn.innerText = 'Get Results';
+                submitBtn.className = 'button-primary px-8 py-3 rounded-lg font-bold';
+                submitBtn.disabled = !isPageValid;
+                submitBtn.onclick = displayResults;
+                navContainer.appendChild(submitBtn);
+            }
         }
         
         function displayResults() {
-           // ... (Same as v5.7) ...
+           showView('loading');
+           setTimeout(() => { 
+                calculateScores();
+                showView('results', buildResultsHTML());
+                
+                const newResetButton = document.querySelector('.restart-button');
+                if(newResetButton) {
+                    newResetButton.onclick = () => { if (lastLoadedData) processSpreadsheet(lastLoadedData); };
+                }
+           }, 500);
         }
 
-        function calculateFinalState() {
-            // ... (Same as v5.7) ...
+        function calculateScores() {
+            userState.scores = {};
+            formRules.questions.forEach(q => {
+                const answer = userState.answers[q.QuestionID];
+                console.log(`answer: ${answer}`);
+                if (!answer) return;
+                
+                if (q.LinkedOutcome && typeof q.LinkedOutcome === 'string') {
+                    const options = String(q.AnswerOptions).split(',');
+                    const outcomes = String(q.LinkedOutcome).split(',');
+
+                    const processOutcome = (outcomeStr) => {
+                        if (!outcomeStr) return;
+                        try {
+                            const scoresToAdd = JSON.parse(outcomeStr);
+                            for (const [category, score] of Object.entries(scoresToAdd)) {
+                                console.log(`category: ${category}`);
+                                userState.scores[category] = (userState.scores[category] || 0) + parseInt(score);
+                            }
+                        } catch(e) { /* Not a JSON score */ }
+                    };
+
+                    if (Array.isArray(answer)) {
+                        answer.forEach(ans => {
+                            const answerIndex = options.map(o => o.trim()).indexOf(ans);
+                            if(answerIndex > -1) processOutcome(outcomes[answerIndex]);
+                        });
+                    } else {
+                        const answerIndex = options.map(o => o.trim()).indexOf(answer);
+                        if(answerIndex > -1) processOutcome(outcomes[answerIndex]);
+                    }
+                }
+            });
         }
         
-        function evaluateCondition(conditionStr) {
-           // ... (Same as v5.7) ...
+        function evaluateCondition(conditionStr, context = 'remediation') {
+            if (typeof conditionStr !== 'string' || !conditionStr.trim()) {
+                return context === 'remediation'; 
+            }
+            if (conditionStr.toUpperCase() === 'ALWAYS_TRUE') return true;
+            
+            const conditions = conditionStr.split(';').map(s => s.trim());
+            const check = context === 'show-hide' ? conditions.some : conditions.every;
+
+            return check.call(conditions, cond => {
+                const match = cond.match(/(SCORE|ANSWER):(.+?) (>=|<=|>|<|=) (.+)/);
+                if (!match) return false;
+                
+                const [, type, key, operator, value] = match.map(s=>s.trim());
+                let subjectValue;
+
+                if (type === 'SCORE') {
+                    subjectValue = userState.scores[key] || 0;
+                } else if (type === 'ANSWER') {
+                    const ans = userState.answers[key];
+                    subjectValue = typeof ans === 'string' ? `'${ans}'` : ans;
+                }
+                
+                try {
+                    return eval(`${subjectValue} ${operator} ${value}`);
+                } catch(e) { return false; }
+            });
         }
         
         function buildResultsHTML() {
-           // ... (Same as v5.7) ...
+            let html = `<h2 class="text-2xl font-bold heading-color mb-6">Your Recommendations</h2>`;
+            const sortedScores = Object.entries(userState.scores).sort((a,b) => b[1] - a[1]);
+            const triggeredRules = formRules.remediation.filter(rule => evaluateCondition(rule.Condition));
+            
+            if (triggeredRules.length === 0) {
+                 html += `<p class="text-color">Based on your answers, no specific recommendations could be generated.</p>`;
+            } else {
+                triggeredRules.forEach(rule => {
+                    const content = formRules.content.find(c => c.ContentID === rule.ContentID);
+                    if(content) {
+                         html += `<div class="result-card" style="border-color:${rule.Color || '#a15236'}">
+                                    <h3>${rule.Title}</h3>
+                                    <p>${rule.Description}</p>
+                                    <div class="mt-4">
+                                        ${buildTierContent(content.Category, sortedScores, rule)}
+                                    </div>
+                                  </div>`;
+                    }
+                });
+            }
+            html += `<div class="text-center mt-8"><button class="restart-button button-primary px-8 py-3 rounded-lg font-bold">Start Over</button></div>`;
+            return html;
         }
 
-        function processTemplate(templateStr) {
-           // ... (Same as v5.7) ...
+        function buildTierContent(category, sortedScores, rule) {
+            console.log(`buildTierContent: ${category} ${sortedScores} ${rule}`);
+            // 
+            let tierHTML = '';
+            const scoresInTier = sortedScores.filter(([,score]) => {
+                console.log(`score: ${score}`);
+                const condition = rule.Condition.split(';').find(c => c.startsWith('SCORE:'));
+                if(!condition) return false;
+                const match = condition.match(/(>=|<=|>|<|=) (.+)/);
+                if(!match) return false;
+                try {
+                    console.log(`${score} ${match[0]}`);
+                    return eval(`${score} ${match[0]}`);
+                } catch(e) { return false; }
+            });
+
+            scoresInTier.filter(([foodGroup,]) => {
+                const content = formRules.content.find(c => c.Category === foodGroup);
+                return content && content.ContentType === category;
+            }).forEach(([foodGroup, score]) => {
+                const foodInfo = formRules.content.find(c => c.Category === foodGroup);
+                tierHTML += `<div class="p-3 rounded border mb-2" style="border-color: #879683;">
+                                <div class="font-medium text-color">${foodGroup} (Score: ${score})</div>
+                                <div class="text-sm text-color">${foodInfo ? parseMarkdown(foodInfo.Content) : ''}</div>
+                             </div>`;
+            });
+            return tierHTML;
+        }
+
+        function parseMarkdown(text) {
+            if (!text || typeof text !== 'string') return '';
+            let html = text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>');
+            
+            if(html.includes(';')) {
+                html = '<ul>' + html.split(';').map(item => `<li>${item.trim()}</li>`).join('') + '</ul>';
+            }
+            return html;
         }
     </script>
 </body>
